@@ -30,6 +30,12 @@ import EssentialLink, { type EssentialLinkProps } from 'components/EssentialLink
 
 const linksList: EssentialLinkProps[] = [
   {
+    title: 'Editor',
+    caption: 'Monaco Editor',
+    icon: 'code',
+    to: '/editor',
+  },
+  {
     title: 'Docs',
     caption: 'quasar.dev',
     icon: 'school',

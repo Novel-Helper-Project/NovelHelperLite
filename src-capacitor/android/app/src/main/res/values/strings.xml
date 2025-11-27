@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ANH Lite</string>
+    <string name="title_activity_main">ANH Lite</string>
+    <string name="package_name">cc.sirrus.anhl</string>
+    <string name="custom_url_scheme">cc.sirrus.anhl</string>
+</resources>

@@ -1,5 +1,15 @@
 <template>
-  <q-item clickable tag="a" target="_blank" :href="link">
+  <q-item v-if="to" clickable :to="to">
+    <q-item-section v-if="icon" avatar>
+      <q-icon :name="icon" />
+    </q-item-section>
+
+    <q-item-section>
+      <q-item-label>{{ title }}</q-item-label>
+      <q-item-label caption>{{ caption }}</q-item-label>
+    </q-item-section>
+  </q-item>
+  <q-item v-else clickable tag="a" target="_blank" :href="link">
     <q-item-section v-if="icon" avatar>
       <q-icon :name="icon" />
     </q-item-section>
@@ -16,12 +26,14 @@ export interface EssentialLinkProps {
   title: string;
   caption?: string;
   link?: string;
+  to?: string;
   icon?: string;
 }
 
 withDefaults(defineProps<EssentialLinkProps>(), {
   caption: '',
   link: '#',
+  to: '',
   icon: '',
 });
 </script>
