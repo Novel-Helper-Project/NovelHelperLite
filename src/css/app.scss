@@ -1,1 +1,219 @@
-// app global css in SCSS form
+// VS Code inspired shell
+:root {
+  --vscode-activity-bg: #20252c;
+  --vscode-sidebar-bg: #1b1f26;
+  --vscode-main-bg: #0f1216;
+  --vscode-border: #2c333d;
+  --vscode-text: #dfe3ea;
+  --vscode-muted: #9aa6b4;
+  --vscode-accent: #4dabf7;
+}
+
+body {
+  background: var(--vscode-main-bg);
+  color: var(--vscode-text);
+}
+
+.app-header {
+  background: #1f242c;
+  border-bottom: 1px solid var(--vscode-border);
+  color: var(--vscode-text);
+
+  .header-meta {
+    font-size: 12px;
+    color: var(--vscode-muted);
+  }
+}
+
+.workspace-shell {
+  display: flex;
+  min-height: calc(100vh - 56px);
+  background: var(--vscode-main-bg);
+  padding: 0;
+}
+
+.workspace-main {
+  flex: 1;
+  min-width: 0;
+  background: var(--vscode-main-bg);
+  color: var(--vscode-text);
+  overflow: auto;
+  padding: 16px;
+}
+
+.vscode-shell {
+  display: flex;
+  width: 360px;
+  min-width: 320px;
+  background: var(--vscode-sidebar-bg);
+  border-right: 1px solid var(--vscode-border);
+}
+
+.activity-bar {
+  width: 56px;
+  background: var(--vscode-activity-bg);
+  border-right: 1px solid var(--vscode-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 4px;
+}
+
+.activity-btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--vscode-muted);
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, color 0.2s ease;
+
+  .material-icons {
+    font-size: 22px;
+  }
+
+  &:hover {
+    color: var(--vscode-text);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  &.is-active {
+    background: #2d3440;
+    color: var(--vscode-accent);
+  }
+}
+
+.sidebar-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-sidebar-bg);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--vscode-border);
+  font-size: 12px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--vscode-muted);
+}
+
+.panel-title {
+  font-weight: 700;
+  color: var(--vscode-text);
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel-placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--vscode-muted);
+  background: linear-gradient(145deg, #1a1f26 0%, #13171c 100%);
+
+  .placeholder-title {
+    font-size: 14px;
+    color: var(--vscode-text);
+    margin: 0;
+  }
+
+  .placeholder-desc {
+    margin: 0;
+    font-size: 12px;
+  }
+}
+
+.vscode-explorer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-sidebar-bg);
+}
+
+.explorer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vscode-border);
+  color: var(--vscode-muted);
+  font-size: 12px;
+  letter-spacing: 0.4px;
+}
+
+.explorer-title {
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--vscode-text);
+}
+
+.explorer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ghost-btn {
+  border: none;
+  background: transparent;
+  color: var(--vscode-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.2s ease, color 0.2s ease;
+
+  .material-icons {
+    font-size: 18px;
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--vscode-text);
+  }
+}
+
+.explorer-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.vscode-tree .n-tree-node {
+  font-size: 13px;
+  color: var(--vscode-text);
+}
+
+.vscode-tree .n-tree-node-content__text {
+  font-weight: 500;
+}
+
+.vscode-tree .n-tree-node-content:hover {
+  background: #252c35;
+}
+
+.vscode-tree .n-tree-node--selected .n-tree-node-content {
+  background: #2d3440;
+  color: var(--vscode-text);
+}
+
+.vscode-tree .tree-icon {
+  font-size: 16px;
+  margin-right: 8px;
+  color: #c3cbd8;
+}
