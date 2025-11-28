@@ -16,7 +16,9 @@
 
     <div class="row items-center justify-between editor-toolbar">
       <div class="column">
-        <div class="text-subtitle2 text-white">{{ workspace.currentFile?.name || '未选择文件' }}</div>
+        <div class="text-subtitle2 text-white">
+          {{ workspace.currentFile?.name || '未选择文件' }}
+        </div>
         <div class="text-caption text-grey-5">
           {{ workspace.currentFile?.path || '请选择左侧文件以打开' }}
         </div>
@@ -34,17 +36,12 @@
       </div>
 
       <div v-else-if="workspace.currentFile.isImage" class="image-viewer">
-        <q-img
+        <InlineImageViewer
+          v-if="workspace.currentFile.mediaUrl"
           :src="workspace.currentFile.mediaUrl"
-          :ratio="4 / 3"
-          fit="contain"
-          spinner-color="white"
-          spinner-size="42px"
-        >
-          <div class="absolute-bottom text-center bg-black text-white q-pa-sm">
-            {{ workspace.currentFile.name }}
-          </div>
-        </q-img>
+          :name="workspace.currentFile.name"
+        />
+        <div v-else class="image-placeholder">无法加载图片资源，请检查文件路径或权限</div>
       </div>
 
       <div
@@ -67,6 +64,7 @@ import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
 import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import { useWorkspaceStore } from 'src/stores/workspace';
+import InlineImageViewer from './InlineImageViewer.vue';
 
 const g = self as typeof self & {
   MonacoEnvironment: {
@@ -172,7 +170,8 @@ function guessLanguage(filename: string) {
 }
 
 async function saveCurrentFile() {
-  if (!workspace.currentFile?.handle || workspace.currentFile.handle.kind !== 'file' || !editor) return;
+  if (!workspace.currentFile?.handle || workspace.currentFile.handle.kind !== 'file' || !editor)
+    return;
 
   const writable = await workspace.currentFile.handle.createWritable();
   const content = editor.getValue();
@@ -257,7 +256,9 @@ function disposeEditor() {
   border-radius: 4px;
   cursor: pointer;
   color: var(--vscode-muted);
-  transition: background 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
 .tab.active {
@@ -305,6 +306,7 @@ function disposeEditor() {
   border: 1px solid var(--vscode-border);
   border-radius: 8px;
   padding: 8px;
+  overflow: hidden;
 }
 
 .welcome {
@@ -328,6 +330,20 @@ function disposeEditor() {
 }
 
 .image-viewer {
-  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.image-placeholder {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--vscode-border);
+  border-radius: 8px;
+  color: var(--vscode-muted);
+  background: #0f1216;
+  font-size: 13px;
 }
 </style>

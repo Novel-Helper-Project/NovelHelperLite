@@ -1,7 +1,12 @@
 <template>
   <div class="vscode-explorer">
     <div class="explorer-toolbar">
-      <div class="explorer-title">文件资源管理器</div>
+      <div class="explorer-title">
+        文件资源管理器
+        <span v-if="!fileSystemSupport.supported" class="compatibility-indicator" :title="fileSystemSupport.reason">
+          ⚠️
+        </span>
+      </div>
       <div class="explorer-actions">
         <button class="ghost-btn" type="button" title="打开文件夹" @click="pickWorkspace">
           <span class="material-icons">folder_open</span>
@@ -14,6 +19,15 @@
           @click="openCapRootMenu($event)"
         >
           <span class="material-icons">drive_file_move</span>
+        </button>
+        <button
+          v-if="!fileSystemSupport.supported && !isCapacitor"
+          class="ghost-btn help-btn"
+          type="button"
+          title="查看兼容性问题"
+          @click="showCompatibilityHelp"
+        >
+          <span class="material-icons">help</span>
         </button>
         <button
           class="ghost-btn"
@@ -83,7 +97,7 @@ import { computed, h, reactive, ref } from 'vue';
 import { NDropdown, NScrollbar, NTree } from 'naive-ui';
 import type { TreeDropInfo, TreeOption } from 'naive-ui';
 import { useWorkspaceStore } from 'src/stores/workspace';
-import Fs, { type FsEntry } from 'src/services/fs';
+import Fs, { type FsEntry, checkFileSystemSupport } from 'src/services/fs';
 import type { Directory as CapDirectory } from '@capacitor/filesystem';
 
 type ExplorerNode = TreeOption & {
@@ -99,6 +113,9 @@ type ExplorerNode = TreeOption & {
 const explorerData = ref<ExplorerNode[]>([]);
 
 const isCapacitor = Fs.getPlatform() === 'capacitor';
+
+// 检查文件系统支持情况
+const fileSystemSupport = checkFileSystemSupport();
 
 const expandedKeys = ref<string[]>([]);
 const selectedKeys = ref<string[]>([]);
@@ -433,12 +450,16 @@ async function pickWorkspace() {
     selectedKeys.value = [];
     contextMenu.node = null;
   } catch (error) {
-    if ((error as Error)?.message?.includes('File System Access')) {
-      window.alert('当前环境不支持文件系统访问');
+    const errorMessage = (error as Error)?.message;
+    if (errorMessage?.includes('文件系统访问不可用') || errorMessage?.includes('File System Access')) {
+      // 使用新的详细错误信息，直接显示给用户
+      window.alert(errorMessage);
       return;
     }
     if ((error as DOMException)?.name !== 'AbortError') {
       console.error('选择目录失败', error);
+      // 对于其他错误，显示简化的提示
+      window.alert('❌ 选择目录失败\n\n请检查权限设置或重试');
     }
   }
 }
@@ -667,4 +688,57 @@ function handleMenuSelect(key: string) {
   }
   contextMenu.show = false;
 }
+
+function showCompatibilityHelp() {
+  const support = fileSystemSupport;
+  let message = `❌ 文件系统访问不可用\n\n`;
+  message += `🔍 当前浏览器：${support.browser || '未知'}\n`;
+  message += `❓ 不支持原因：${support.reason || '未知'}\n\n`;
+  message += `💡 解决建议：\n${support.suggestion || '请尝试其他浏览器'}`;
+
+  // 如果有调试信息，添加到控制台
+  if (support.debug) {
+    console.group('🔍 浏览器兼容性调试信息');
+    console.log('User-Agent:', support.debug.userAgent);
+    console.log('检测结果详情:', support.debug.details);
+    console.groupEnd();
+
+    message += '\n\n📋 详细调试信息已输出到控制台，请按 F12 查看';
+  }
+
+  window.alert(message);
+}
 </script>
+
+<style scoped>
+/* 兼容性指示器样式 */
+.compatibility-indicator {
+  margin-left: 8px;
+  font-size: 14px;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.compatibility-indicator:hover {
+  opacity: 1;
+}
+
+/* 帮助按钮特殊样式 */
+.help-btn {
+  background-color: #ff9800 !important;
+  color: white !important;
+  border: 1px solid #ff9800 !important;
+}
+
+.help-btn:hover {
+  background-color: #f57c00 !important;
+  border-color: #f57c00 !important;
+}
+
+.explorer-title {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: var(--vscode-text);
+}
+</style>

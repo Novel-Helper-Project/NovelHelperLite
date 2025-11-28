@@ -27,7 +27,7 @@ body {
 
 .workspace-shell {
   display: flex;
-  min-height: calc(100vh - 56px);
+  height: 100vh;
   background: var(--vscode-main-bg);
   padding: 0;
 }
@@ -38,7 +38,7 @@ body {
   background: var(--vscode-main-bg);
   color: var(--vscode-text);
   overflow: auto;
-  padding: 16px;
+  padding: 0px;
 }
 
 .vscode-shell {
@@ -71,7 +71,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
 
   .material-icons {
     font-size: 22px;
@@ -177,7 +179,9 @@ body {
   cursor: pointer;
   padding: 4px;
   border-radius: 6px;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
 
   .material-icons {
     font-size: 18px;

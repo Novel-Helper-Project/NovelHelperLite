@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-pa-md column no-wrap">
+  <q-page class="q-pa-md column no-wrap" style="height: 100%;">
     <MonacoEditorPane />
   </q-page>
 </template>
