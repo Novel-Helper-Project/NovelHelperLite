@@ -102,6 +102,8 @@ const editorEl = ref<HTMLDivElement | null>(null);
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 let disposables: monaco.IDisposable[] = [];
 const viewStates = new Map<string, monaco.editor.ICodeEditorViewState | null>();
+let resizeObserver: ResizeObserver | null = null;
+let layoutRaf: number | null = null;
 
 const canSave = computed(
   () =>
@@ -120,6 +122,13 @@ const currentImage = computed(() =>
 
 onMounted(() => {
   void ensureEditor();
+
+  const el = editorEl.value;
+  if (el && 'ResizeObserver' in window) {
+    resizeObserver = new ResizeObserver(() => layoutEditor());
+    resizeObserver.observe(el);
+  }
+  window.addEventListener('resize', layoutEditor);
 
   watch(
     () => workspace.currentFile,
@@ -181,6 +190,15 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   disposeEditor();
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+  if (layoutRaf) {
+    cancelAnimationFrame(layoutRaf);
+    layoutRaf = null;
+  }
+  window.removeEventListener('resize', layoutEditor);
 });
 
 function guessLanguage(filename: string) {
@@ -287,10 +305,18 @@ async function ensureEditor() {
 }
 
 function layoutEditor() {
+  if (layoutRaf) {
+    cancelAnimationFrame(layoutRaf);
+    layoutRaf = null;
+  }
   if (editor && editorEl.value) {
-    editor.layout({
-      width: editorEl.value.clientWidth,
-      height: editorEl.value.clientHeight,
+    const host = editorEl.value;
+    layoutRaf = requestAnimationFrame(() => {
+      editor?.layout({
+        width: host.clientWidth,
+        height: host.clientHeight,
+      });
+      layoutRaf = null;
     });
   }
 }
@@ -380,9 +406,10 @@ function disposeEditor() {
 }
 
 .monaco-host {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 300px;
-  width: 100%;
+  min-width: 0;
+  width: auto;
   height: 100%;
 }
 

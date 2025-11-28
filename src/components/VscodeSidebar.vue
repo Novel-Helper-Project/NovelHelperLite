@@ -1,6 +1,7 @@
 <template>
-  <div class="vscode-shell" :class="{ 'sidebar-hidden': !sidebarVisible }" :style="shellStyle">
+  <div class="vscode-shell" :style="shellStyle">
     <nav class="activity-bar">
+      <!-- 标签按钮 -->
       <button
         v-for="tab in tabs"
         :key="tab.key"
@@ -9,23 +10,32 @@
         type="button"
         :title="tab.label"
         @click="handleTabClick(tab.key)"
-        @dblclick="toggleSidebar"
       >
         <span class="material-icons">{{ tab.icon }}</span>
       </button>
 
-      <!-- 底部设置按钮 -->
+      <!-- 底部按钮组 -->
       <div class="activity-bar-footer">
+        <!-- 侧边栏面板切换按钮 -->
+        <button
+          class="activity-btn toggle-btn"
+          type="button"
+          :title="sidebarPanelVisible ? '隐藏侧边栏面板' : '显示侧边栏面板'"
+          @click="toggleSidebarPanel"
+        >
+          <span class="material-icons">{{
+            sidebarPanelVisible ? 'chevron_left' : 'chevron_right'
+          }}</span>
+        </button>
+
+        <!-- 设置按钮 -->
         <button class="activity-btn settings-btn" type="button" title="设置" @click="openSettings">
           <span class="material-icons">settings</span>
         </button>
       </div>
     </nav>
 
-    <section
-      class="sidebar-panel"
-      :style="sidebarVisible ? panelStyle : undefined"
-    >
+    <section v-show="sidebarPanelVisible" class="sidebar-panel" :style="panelStyle">
       <div class="panel-header">
         <span class="panel-title">{{ activeTabLabel }}</span>
         <span class="panel-subtitle">侧栏</span>
@@ -37,7 +47,7 @@
     </section>
 
     <div
-      v-show="sidebarVisible"
+      v-show="sidebarPanelVisible"
       class="sidebar-resizer"
       :class="{ 'is-dragging': isResizing }"
       @mousedown.prevent="startResizing"
@@ -66,14 +76,15 @@ const tabs: SidebarTab[] = [
 ];
 
 const activeTab = ref<SidebarTab['key']>('explorer');
-const sidebarVisible = ref<boolean>(true);
 const isResizing = ref(false);
+const sidebarPanelVisible = ref<boolean>(true);
 
 const DEFAULT_SIDEBAR_WIDTH = 240;
 const MIN_SIDEBAR_WIDTH = 180;
 const MAX_SIDEBAR_WIDTH = 520;
 const ACTIVITY_BAR_WIDTH = 56;
 const SIDEBAR_WIDTH_KEY = 'sidebarWidth';
+const SIDEBAR_PANEL_VISIBLE_KEY = 'sidebarPanelVisible';
 
 const sidebarWidth = ref<number>(DEFAULT_SIDEBAR_WIDTH);
 let dragStartX = 0;
@@ -89,42 +100,66 @@ const panelStyle = computed(() => ({
 }));
 
 const shellStyle = computed(() => ({
-  width: `${ACTIVITY_BAR_WIDTH + (sidebarVisible.value ? sidebarWidth.value : 0)}px`,
+  width: `${ACTIVITY_BAR_WIDTH + (sidebarPanelVisible.value ? sidebarWidth.value : 0)}px`,
 }));
 
-const clampWidth = (value: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
+const clampWidth = (value: number) =>
+  Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
 
 async function loadSidebarWidth() {
   try {
-    const stored = await storage.get<number>(SIDEBAR_WIDTH_KEY);
-    if (typeof stored === 'number' && !Number.isNaN(stored)) {
-      sidebarWidth.value = clampWidth(stored);
+    const [width, panelVisible] = await Promise.all([
+      storage.get<number>(SIDEBAR_WIDTH_KEY),
+      storage.get<boolean>(SIDEBAR_PANEL_VISIBLE_KEY),
+    ]);
+
+    if (typeof width === 'number' && !Number.isNaN(width)) {
+      sidebarWidth.value = clampWidth(width);
+    }
+
+    if (typeof panelVisible === 'boolean') {
+      sidebarPanelVisible.value = panelVisible;
     }
   } catch (error) {
-    console.warn('读取侧栏宽度失败，将使用默认值', error);
+    console.warn('读取侧栏设置失败，将使用默认值', error);
   }
 }
 
 async function persistSidebarWidth(width: number) {
   try {
-    await storage.set(SIDEBAR_WIDTH_KEY, clampWidth(width));
+    await Promise.all([
+      storage.set(SIDEBAR_WIDTH_KEY, clampWidth(width)),
+      storage.set(SIDEBAR_PANEL_VISIBLE_KEY, sidebarPanelVisible.value),
+    ]);
   } catch (error) {
-    console.warn('保存侧栏宽度失败', error);
+    console.warn('保存侧栏设置失败', error);
   }
 }
 
 // 处理标签点击
 function handleTabClick(tabKey: SidebarTab['key']) {
-  if (!sidebarVisible.value) {
-    // 如果侧边栏隐藏，先显示它
-    sidebarVisible.value = true;
+  if (!sidebarPanelVisible.value) {
+    // 如果面板隐藏，先显示它并切换到对应标签
+    sidebarPanelVisible.value = true;
+    // 短暂延迟确保面板先显示再切换标签
+    setTimeout(() => {
+      activeTab.value = tabKey;
+    }, 50);
+  } else {
+    // 如果面板已显示且点击的是当前活动标签，则隐藏面板
+    if (activeTab.value === tabKey) {
+      sidebarPanelVisible.value = false;
+    } else {
+      // 否则切换到对应标签
+      activeTab.value = tabKey;
+    }
   }
-  activeTab.value = tabKey;
 }
 
-// 切换侧边栏显示/隐藏
-function toggleSidebar() {
-  sidebarVisible.value = !sidebarVisible.value;
+// 切换侧边栏面板显示/隐藏
+function toggleSidebarPanel() {
+  sidebarPanelVisible.value = !sidebarPanelVisible.value;
+  void persistSidebarPanelVisibility();
 }
 
 function handleMouseMove(event: MouseEvent) {
@@ -144,7 +179,7 @@ function stopResizing() {
 }
 
 function startResizing(event: MouseEvent) {
-  if (!sidebarVisible.value) return;
+  if (!sidebarPanelVisible.value) return;
   isResizing.value = true;
   dragStartX = event.clientX;
   dragStartWidth = sidebarWidth.value;
@@ -153,8 +188,26 @@ function startResizing(event: MouseEvent) {
   window.addEventListener('mouseup', stopResizing);
 }
 
+// 键盘事件处理
+function handleKeyDown(event: KeyboardEvent) {
+  // 快捷键支持 (Escape 键隐藏面板)
+  if (event.key === 'Escape' && sidebarPanelVisible.value) {
+    sidebarPanelVisible.value = false;
+    return;
+  }
+}
+
 const { upsertAndFocus } = useWorkspaceStore();
 const settingsStore = useSettingsStore();
+
+// 持久化面板可见性状态
+async function persistSidebarPanelVisibility() {
+  try {
+    await storage.set(SIDEBAR_PANEL_VISIBLE_KEY, sidebarPanelVisible.value);
+  } catch (error) {
+    console.warn('保存面板可见性设置失败', error);
+  }
+}
 
 // 定义设置数据类型
 interface SettingsData {
@@ -226,7 +279,7 @@ async function openSettings() {
       handle: null,
       mime: 'application/json',
       isImage: false,
-      onSave: createSaveCallback()
+      onSave: createSaveCallback(),
     };
 
     // 通过workspace store打开设置文件
@@ -247,7 +300,7 @@ async function openSettings() {
       handle: null,
       mime: 'application/json',
       isImage: false,
-      onSave: createSaveCallback()
+      onSave: createSaveCallback(),
     };
 
     upsertAndFocus(settingsFile);
@@ -271,10 +324,21 @@ const PanelPlaceholder = defineComponent({
   },
 });
 
-onMounted(loadSidebarWidth);
+onMounted(async () => {
+  try {
+    await loadSidebarWidth();
+  } catch (error) {
+    console.warn('初始化侧边栏失败，将使用默认值', error);
+  }
+  // 添加键盘事件监听
+  window.addEventListener('keydown', handleKeyDown);
+});
 onBeforeUnmount(() => {
-  window.removeEventListener('mousemove', handleMouseMove);
-  window.removeEventListener('mouseup', stopResizing);
+  if (isResizing.value) {
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', stopResizing);
+  }
+  window.removeEventListener('keydown', handleKeyDown);
   document.body.style.userSelect = '';
 });
 </script>
@@ -302,18 +366,11 @@ onBeforeUnmount(() => {
 }
 
 /* 隐藏状态下的侧边栏面板 */
-.sidebar-hidden .sidebar-panel {
-  width: 0;
+.sidebar-panel[style*='width: 0px'],
+.sidebar-panel[style*='width: 0'] {
   min-width: 0;
   border-right: none;
   overflow: hidden;
-  flex-shrink: 0;
-}
-
-/* 确保隐藏时内容不可见 */
-.sidebar-hidden .sidebar-panel * {
-  opacity: 0;
-  transition: opacity 0.15s ease-in-out;
 }
 
 .sidebar-panel * {
@@ -321,16 +378,34 @@ onBeforeUnmount(() => {
   transition: opacity 0.15s ease-in-out;
 }
 
-/* 活动栏底部设置按钮 */
+/* 活动栏底部按钮组 */
 .activity-bar-footer {
   margin-top: auto;
   padding-top: 8px;
   border-top: 1px solid var(--vscode-border);
   width: 100%;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
+/* 侧边栏切换按钮 */
+.toggle-btn {
+  background-color: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--vscode-button-secondaryBorder);
+  margin-bottom: 4px;
+}
+
+.toggle-btn:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.toggle-btn .material-icons {
+  font-size: 16px;
+}
+
+/* 设置按钮 */
 .activity-bar-footer .settings-btn .material-icons {
   font-size: 18px;
 }
