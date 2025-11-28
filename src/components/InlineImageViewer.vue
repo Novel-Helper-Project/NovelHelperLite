@@ -11,11 +11,11 @@
         @touchend="onTouchEnd"
         @touchcancel="onTouchEnd"
       >
-        <div v-if="src" class="viewer-transform" :style="transformStyle">
+        <div v-if="imageSrc" class="viewer-transform" :style="transformStyle">
           <!-- 基于 Quasar 的图片组件 -->
           <q-img
-            :src="src"
-            :alt="name || 'image'"
+            :src="imageSrc"
+            :alt="imageName || 'image'"
             class="viewer-img"
             fit="contain"
             :draggable="false"
@@ -68,19 +68,25 @@
     </div>
 
     <div class="viewer-footer">
-      <div class="file-name" :title="name">{{ name }}</div>
+      <div class="file-name" :title="imageName">{{ imageName }}</div>
       <div class="viewer-hint">滚轮缩放 · 拖拽查看 · 双击重置 · 触摸缩放/拖拽</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useSettingsStore } from 'src/stores/settings';
+import type { ImageViewState } from 'src/types/editorState';
 
-const { src, name } = defineProps<{
+const props = defineProps<{
   src: string;
   name?: string;
+  state?: ImageViewState | undefined;
+}>();
+
+const emit = defineEmits<{
+  'update:state': [ImageViewState];
 }>();
 
 const settingsStore = useSettingsStore();
@@ -118,6 +124,9 @@ const initialPinchRotation = ref(0);
 const pinchOffsetX = ref(0);
 const pinchOffsetY = ref(0);
 
+const imageSrc = computed(() => props.src);
+const imageName = computed(() => props.name);
+
 const transformStyle = computed(() => {
   const sx = scale.value * (flipX.value ? -1 : 1);
   const sy = scale.value * (flipY.value ? -1 : 1);
@@ -145,28 +154,55 @@ function clampScale(next: number) {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, next));
 }
 
+function applyState(state?: ImageViewState) {
+  if (!state) return;
+  scale.value = state.scale ?? 1;
+  rotation.value = state.rotation ?? 0;
+  offsetX.value = state.offsetX ?? 0;
+  offsetY.value = state.offsetY ?? 0;
+  flipX.value = state.flipX ?? false;
+  flipY.value = state.flipY ?? false;
+}
+
+function emitState() {
+  emit('update:state', {
+    scale: scale.value,
+    rotation: rotation.value,
+    offsetX: offsetX.value,
+    offsetY: offsetY.value,
+    flipX: flipX.value,
+    flipY: flipY.value,
+  });
+}
+
 function zoomIn() {
   scale.value = clampScale(scale.value * (1 + ZOOM_STEP));
+  emitState();
 }
 
 function zoomOut() {
   scale.value = clampScale(scale.value * (1 - ZOOM_STEP));
+  emitState();
 }
 
 function rotateLeft() {
   rotation.value -= 90;
+  emitState();
 }
 
 function rotateRight() {
   rotation.value += 90;
+  emitState();
 }
 
 function flipHorizontal() {
   flipX.value = !flipX.value;
+  emitState();
 }
 
 function flipVertical() {
   flipY.value = !flipY.value;
+  emitState();
 }
 
 function resetView() {
@@ -176,11 +212,12 @@ function resetView() {
   offsetY.value = 0;
   flipX.value = false;
   flipY.value = false;
+  emitState();
 }
 
 // 鼠标滚轮缩放（以鼠标指针位置为中心）
 function onWheel(e: WheelEvent) {
-  if (!src) return;
+  if (!props.src) return;
   e.preventDefault();
   e.stopPropagation();
 
@@ -206,11 +243,12 @@ function onWheel(e: WheelEvent) {
   // 重新计算偏移量，使鼠标位置保持在屏幕上的同一位置
   offsetX.value = mouseX - worldX * scale.value;
   offsetY.value = mouseY - worldY * scale.value;
+  emitState();
 }
 
 // 鼠标拖拽
 function onPointerDown(e: MouseEvent) {
-  if (!src) return;
+  if (!props.src) return;
   // 只响应左键
   if (e.button !== 0) return;
   isPanning.value = true;
@@ -229,6 +267,7 @@ function onPointerDown(e: MouseEvent) {
 
   const onUp = () => {
     isPanning.value = false;
+    emitState();
     window.removeEventListener('mousemove', onMove);
     window.removeEventListener('mouseup', onUp);
   };
@@ -251,7 +290,7 @@ function getTouchAngle(t1: Touch, t2: Touch) {
 }
 
 function onTouchStart(e: TouchEvent) {
-  if (!src) return;
+  if (!props.src) return;
   if (e.touches.length === 1) {
     // 单指拖拽
     isPanning.value = true;
@@ -286,7 +325,7 @@ function onTouchStart(e: TouchEvent) {
 }
 
 function onTouchMove(e: TouchEvent) {
-  if (!src) return;
+  if (!props.src) return;
   if (isPinching.value && e.touches.length === 2) {
     const [t1, t2] = [e.touches[0]!, e.touches[1]!];
     const dist = getTouchDistance(t1, t2);
@@ -342,18 +381,28 @@ function onTouchMove(e: TouchEvent) {
 }
 
 function onTouchEnd() {
-  if (!src) return;
+  if (!props.src) return;
   if (isPinching.value) {
     isPinching.value = false;
     initialPinchDistance.value = 0;
     initialPinchAngle.value = 0;
     pinchOffsetX.value = 0;
     pinchOffsetY.value = 0;
+    emitState();
   }
   if (isPanning.value) {
     isPanning.value = false;
+    emitState();
   }
 }
+
+watch(
+  () => props.state,
+  (state) => {
+    applyState(state);
+  },
+  { immediate: true, deep: true },
+);
 </script>
 
 <style scoped>

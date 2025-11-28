@@ -136,7 +136,7 @@ const contextMenu = reactive({
   node: null as ExplorerNode | null,
 });
 
-const { upsertAndFocus, setRootHandle } = useWorkspaceStore();
+const { upsertAndFocus, setRootHandle, switchWorkspace } = useWorkspaceStore();
 
 const contextMenuOptions = computed(() => [
   { label: '新建文件', key: 'new-file' },
@@ -241,6 +241,7 @@ async function restoreLastWorkspace() {
     expandedKeys.value = [rootKey];
     selectedKeys.value = [];
     contextMenu.node = null;
+    await switchWorkspace(rootKey, normalizedPath);
   } catch (error) {
     console.warn('恢复最近打开的文件夹失败', error);
   }
@@ -494,32 +495,34 @@ async function pickWorkspace() {
         fsEntry: rootEntry,
         children: convertFsTreeToExplorer(treeEntries, rootEntry.path ?? rootEntry.name),
       };
-      explorerData.value = [rootNode];
-      expandedKeys.value = [rootNode.key];
-      selectedKeys.value = [];
-      contextMenu.node = null;
-      await persistLastWorkspace(rootEntry);
-      return;
-    } catch (error) {
-      console.error('系统选择目录失败，使用默认目录', error);
-      const rootEntry = await Fs.pickDirectory();
-      const treeEntries = await Fs.buildTree(rootEntry);
-      const rootNode: ExplorerNode = {
+    explorerData.value = [rootNode];
+    expandedKeys.value = [rootNode.key];
+    selectedKeys.value = [];
+    contextMenu.node = null;
+    await persistLastWorkspace(rootEntry);
+    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
+    return;
+  } catch (error) {
+    console.error('系统选择目录失败，使用默认目录', error);
+    const rootEntry = await Fs.pickDirectory();
+    const treeEntries = await Fs.buildTree(rootEntry);
+    const rootNode: ExplorerNode = {
         key: rootEntry.path ?? rootEntry.name,
         label: rootEntry.name,
         type: 'folder',
         path: rootEntry.path ?? rootEntry.name,
         fsEntry: rootEntry,
-        children: convertFsTreeToExplorer(treeEntries, rootEntry.path ?? rootEntry.name),
-      };
-      explorerData.value = [rootNode];
-      expandedKeys.value = [rootNode.key];
-      selectedKeys.value = [];
-      contextMenu.node = null;
-      await persistLastWorkspace(rootEntry);
-      return;
-    }
+      children: convertFsTreeToExplorer(treeEntries, rootEntry.path ?? rootEntry.name),
+    };
+    explorerData.value = [rootNode];
+    expandedKeys.value = [rootNode.key];
+    selectedKeys.value = [];
+    contextMenu.node = null;
+    await persistLastWorkspace(rootEntry);
+    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
+    return;
   }
+}
   try {
     const rootEntry = await Fs.pickDirectory();
     if (
@@ -543,6 +546,7 @@ async function pickWorkspace() {
     selectedKeys.value = [];
     contextMenu.node = null;
     await persistLastWorkspace(rootEntry);
+    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
   } catch (error) {
     const errorMessage = (error as Error)?.message;
     if (
@@ -583,6 +587,7 @@ async function handleCapRootSelect(key: string) {
     selectedKeys.value = [];
     contextMenu.node = null;
     await persistLastWorkspace(rootEntry);
+    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
   } catch (e) {
     console.error('选择根目录失败', e);
   } finally {

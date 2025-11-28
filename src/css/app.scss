@@ -43,8 +43,8 @@ body {
 
 .vscode-shell {
   display: flex;
-  width: 360px;
-  min-width: 320px;
+  flex: 0 0 auto;
+  min-width: 56px;
   background: var(--vscode-sidebar-bg);
   border-right: 1px solid var(--vscode-border);
 }

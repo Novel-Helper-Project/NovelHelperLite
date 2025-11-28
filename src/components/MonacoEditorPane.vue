@@ -38,21 +38,24 @@
         <div class="welcome-hint">支持文本编辑、图片预览、多标签</div>
       </div>
 
-      <div v-else-if="workspace.currentFile.isImage" class="image-viewer">
+      <keep-alive>
         <InlineImageViewer
-          v-if="workspace.currentFile.mediaUrl"
-          :src="workspace.currentFile.mediaUrl"
-          :name="workspace.currentFile.name"
+          v-for="file in imageFiles"
+          :key="file.path"
+          v-show="workspace.currentFile?.path === file.path"
+          :src="file.mediaUrl || ''"
+          :name="file.name"
+          :state="file.imageState || undefined"
+          @update:state="(next) => setImageViewState(file.path, next)"
+          class="image-viewer"
         />
-        <div v-else class="image-placeholder">无法加载图片资源，请检查文件路径或权限</div>
+      </keep-alive>
+
+      <div v-if="currentImage && !currentImage.mediaUrl" class="image-placeholder">
+        无法加载图片资源，请检查文件路径或权限
       </div>
 
-      <div
-        v-else
-        ref="editorEl"
-        class="monaco-host"
-        :style="{ display: showMonaco ? 'block' : 'none' }"
-      ></div>
+      <div v-show="showMonaco" ref="editorEl" class="monaco-host"></div>
     </div>
   </div>
 </template>
@@ -92,10 +95,13 @@ const {
   markCurrentFileSaved,
   setActiveFile,
   closeFile,
+  setImageViewState,
+  setEditorViewState,
 } = useWorkspaceStore();
 const editorEl = ref<HTMLDivElement | null>(null);
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 let disposables: monaco.IDisposable[] = [];
+const viewStates = new Map<string, monaco.editor.ICodeEditorViewState | null>();
 
 const canSave = computed(
   () =>
@@ -105,17 +111,35 @@ const canSave = computed(
       workspace.currentFile.onSave),
 );
 const showMonaco = computed(() => !!workspace.currentFile && !workspace.currentFile.isImage);
+const imageFiles = computed(() =>
+  workspace.openFiles.filter((f): f is OpenFile & { isImage: true } => !!f.isImage),
+);
+const currentImage = computed(() =>
+  workspace.currentFile && workspace.currentFile.isImage ? workspace.currentFile : null,
+);
 
 onMounted(() => {
   void ensureEditor();
 
   watch(
     () => workspace.currentFile,
-    async (file) => {
-      if (!file || file.isImage) {
-        disposeEditor();
+    async (file, prev) => {
+      // 先保存上一份视图状态，避免切换时丢失光标/滚动位置
+      if (prev?.path && editor) {
+        const savedState = editor.saveViewState();
+        viewStates.set(prev.path, savedState);
+        setEditorViewState(prev.path, savedState ?? undefined);
+      }
+
+      if (!file) {
         return;
       }
+
+      // 图片标签页不销毁，保持其组件由 keep-alive 管理
+      if (file.isImage) {
+        return;
+      }
+
       const instance = await ensureEditor();
       if (!instance) return;
       const language = guessLanguage(file.name);
@@ -124,10 +148,20 @@ onMounted(() => {
       if (!model) {
         model = monaco.editor.createModel(file.content ?? '', language, uri);
       } else {
-        model.setValue(file.content ?? '');
         monaco.editor.setModelLanguage(model, language);
+        // 仅当内容不一致时才更新，避免破坏撤销栈与光标
+        if (model.getValue() !== (file.content ?? '')) {
+          model.setValue(file.content ?? '');
+        }
       }
       instance.setModel(model);
+
+      // 恢复该文件的视图状态
+      const viewState = viewStates.get(file.path) ?? (file.viewState as monaco.editor.ICodeEditorViewState | null | undefined);
+      if (viewState) {
+        viewStates.set(file.path, viewState);
+        instance.restoreViewState(viewState);
+      }
       layoutEditor();
     },
     { immediate: true },
@@ -262,6 +296,11 @@ function layoutEditor() {
 }
 
 function disposeEditor() {
+  if (editor && editor.getModel() && workspace.currentFile?.path) {
+    const savedState = editor.saveViewState();
+    viewStates.set(workspace.currentFile.path, savedState);
+    setEditorViewState(workspace.currentFile.path, savedState ?? undefined);
+  }
   editor?.dispose();
   disposables.forEach((d) => d.dispose());
   disposables = [];

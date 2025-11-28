@@ -1,5 +1,5 @@
 <template>
-  <div class="vscode-shell">
+  <div class="vscode-shell" :class="{ 'sidebar-hidden': !sidebarVisible }" :style="shellStyle">
     <nav class="activity-bar">
       <button
         v-for="tab in tabs"
@@ -8,7 +8,8 @@
         :class="{ 'is-active': tab.key === activeTab }"
         type="button"
         :title="tab.label"
-        @click="activeTab = tab.key"
+        @click="handleTabClick(tab.key)"
+        @dblclick="toggleSidebar"
       >
         <span class="material-icons">{{ tab.icon }}</span>
       </button>
@@ -21,7 +22,10 @@
       </div>
     </nav>
 
-    <section class="sidebar-panel">
+    <section
+      class="sidebar-panel"
+      :style="sidebarVisible ? panelStyle : undefined"
+    >
       <div class="panel-header">
         <span class="panel-title">{{ activeTabLabel }}</span>
         <span class="panel-subtitle">侧栏</span>
@@ -31,11 +35,18 @@
         <PanelPlaceholder v-show="activeTab !== 'explorer'" :label="activeTabLabel" />
       </div>
     </section>
+
+    <div
+      v-show="sidebarVisible"
+      class="sidebar-resizer"
+      :class="{ 'is-dragging': isResizing }"
+      @mousedown.prevent="startResizing"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, ref } from 'vue';
+import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue';
 import FileExplorer from './FileExplorer.vue';
 import { useWorkspaceStore } from 'src/stores/workspace';
 import { useSettingsStore } from 'src/stores/settings';
@@ -55,10 +66,92 @@ const tabs: SidebarTab[] = [
 ];
 
 const activeTab = ref<SidebarTab['key']>('explorer');
+const sidebarVisible = ref<boolean>(true);
+const isResizing = ref(false);
+
+const DEFAULT_SIDEBAR_WIDTH = 240;
+const MIN_SIDEBAR_WIDTH = 180;
+const MAX_SIDEBAR_WIDTH = 520;
+const ACTIVITY_BAR_WIDTH = 56;
+const SIDEBAR_WIDTH_KEY = 'sidebarWidth';
+
+const sidebarWidth = ref<number>(DEFAULT_SIDEBAR_WIDTH);
+let dragStartX = 0;
+let dragStartWidth = DEFAULT_SIDEBAR_WIDTH;
 
 const activeTabLabel = computed(
   () => tabs.find((tab) => tab.key === activeTab.value)?.label ?? '侧栏',
 );
+
+const panelStyle = computed(() => ({
+  width: `${sidebarWidth.value}px`,
+  minWidth: `${sidebarWidth.value}px`,
+}));
+
+const shellStyle = computed(() => ({
+  width: `${ACTIVITY_BAR_WIDTH + (sidebarVisible.value ? sidebarWidth.value : 0)}px`,
+}));
+
+const clampWidth = (value: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
+
+async function loadSidebarWidth() {
+  try {
+    const stored = await storage.get<number>(SIDEBAR_WIDTH_KEY);
+    if (typeof stored === 'number' && !Number.isNaN(stored)) {
+      sidebarWidth.value = clampWidth(stored);
+    }
+  } catch (error) {
+    console.warn('读取侧栏宽度失败，将使用默认值', error);
+  }
+}
+
+async function persistSidebarWidth(width: number) {
+  try {
+    await storage.set(SIDEBAR_WIDTH_KEY, clampWidth(width));
+  } catch (error) {
+    console.warn('保存侧栏宽度失败', error);
+  }
+}
+
+// 处理标签点击
+function handleTabClick(tabKey: SidebarTab['key']) {
+  if (!sidebarVisible.value) {
+    // 如果侧边栏隐藏，先显示它
+    sidebarVisible.value = true;
+  }
+  activeTab.value = tabKey;
+}
+
+// 切换侧边栏显示/隐藏
+function toggleSidebar() {
+  sidebarVisible.value = !sidebarVisible.value;
+}
+
+function handleMouseMove(event: MouseEvent) {
+  if (!isResizing.value) return;
+  const delta = event.clientX - dragStartX;
+  const nextWidth = clampWidth(dragStartWidth + delta);
+  sidebarWidth.value = nextWidth;
+}
+
+function stopResizing() {
+  if (!isResizing.value) return;
+  isResizing.value = false;
+  window.removeEventListener('mousemove', handleMouseMove);
+  window.removeEventListener('mouseup', stopResizing);
+  document.body.style.userSelect = '';
+  void persistSidebarWidth(sidebarWidth.value);
+}
+
+function startResizing(event: MouseEvent) {
+  if (!sidebarVisible.value) return;
+  isResizing.value = true;
+  dragStartX = event.clientX;
+  dragStartWidth = sidebarWidth.value;
+  document.body.style.userSelect = 'none';
+  window.addEventListener('mousemove', handleMouseMove);
+  window.addEventListener('mouseup', stopResizing);
+}
 
 const { upsertAndFocus } = useWorkspaceStore();
 const settingsStore = useSettingsStore();
@@ -177,9 +270,57 @@ const PanelPlaceholder = defineComponent({
       ]);
   },
 });
+
+onMounted(loadSidebarWidth);
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', handleMouseMove);
+  window.removeEventListener('mouseup', stopResizing);
+  document.body.style.userSelect = '';
+});
 </script>
 
 <style scoped>
+/* 侧边栏容器 */
+.vscode-shell {
+  display: flex;
+  height: 100%;
+  position: relative;
+}
+
+/* 侧边栏面板显示/隐藏动画 */
+.sidebar-panel {
+  width: 240px;
+  min-width: 240px;
+  background-color: var(--vscode-sideBar-background);
+  border-right: 1px solid var(--vscode-sideBar-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.2s ease-in-out;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* 隐藏状态下的侧边栏面板 */
+.sidebar-hidden .sidebar-panel {
+  width: 0;
+  min-width: 0;
+  border-right: none;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* 确保隐藏时内容不可见 */
+.sidebar-hidden .sidebar-panel * {
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+}
+
+.sidebar-panel * {
+  opacity: 1;
+  transition: opacity 0.15s ease-in-out;
+}
+
 /* 活动栏底部设置按钮 */
 .activity-bar-footer {
   margin-top: auto;
@@ -192,5 +333,21 @@ const PanelPlaceholder = defineComponent({
 
 .activity-bar-footer .settings-btn .material-icons {
   font-size: 18px;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.is-dragging {
+  background: rgba(255, 255, 255, 0.08);
 }
 </style>
