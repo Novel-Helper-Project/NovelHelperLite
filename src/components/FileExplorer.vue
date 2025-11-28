@@ -3,7 +3,11 @@
     <div class="explorer-toolbar">
       <div class="explorer-title">
         文件资源管理器
-        <span v-if="!fileSystemSupport.supported" class="compatibility-indicator" :title="fileSystemSupport.reason">
+        <span
+          v-if="!fileSystemSupport.supported"
+          class="compatibility-indicator"
+          :title="fileSystemSupport.reason"
+        >
           ⚠️
         </span>
       </div>
@@ -93,11 +97,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, reactive, ref } from 'vue';
+import { computed, h, reactive, ref, onMounted } from 'vue';
 import { NDropdown, NScrollbar, NTree } from 'naive-ui';
 import type { TreeDropInfo, TreeOption } from 'naive-ui';
 import { useWorkspaceStore } from 'src/stores/workspace';
 import Fs, { type FsEntry, checkFileSystemSupport } from 'src/services/fs';
+import {
+  persistLastWorkspace,
+  loadLastWorkspace,
+  getPersistedDirectoryHandle,
+} from 'src/services/workspacePersistence';
 import type { Directory as CapDirectory } from '@capacitor/filesystem';
 
 type ExplorerNode = TreeOption & {
@@ -145,6 +154,10 @@ const capRootOptions = computed(() => [
   { label: 'ExternalStorage', key: 'ExternalStorage' },
 ]);
 
+onMounted(() => {
+  void restoreLastWorkspace();
+});
+
 function renderPrefix({ option }: { option: TreeOption }) {
   const node = option as ExplorerNode;
   const iconName = node.type === 'folder' ? 'folder' : 'insert_drive_file';
@@ -164,6 +177,84 @@ function allowDrop(info: AllowDropInfo) {
     return node.type === 'folder';
   }
   return true;
+}
+
+async function restoreLastWorkspace() {
+  try {
+    const persisted = await loadLastWorkspace();
+    if (!persisted || persisted.platform !== Fs.getPlatform()) {
+      return;
+    }
+
+    let rootEntry: FsEntry | null = null;
+
+    if (persisted.platform === 'web') {
+      const handle = await getPersistedDirectoryHandle();
+      if (!handle) return;
+      const granted = await ensureDirectoryPermission(handle);
+      if (!granted) return;
+      rootEntry = {
+        kind: 'directory',
+        name: persisted.name || handle.name,
+        path: persisted.path || handle.name,
+        webHandle: handle,
+      };
+      setRootHandle(handle);
+    } else if (persisted.platform === 'node') {
+      if (!persisted.path) return;
+      rootEntry = {
+        kind: 'directory',
+        name: persisted.name || persisted.path,
+        path: persisted.path,
+      };
+    } else if (persisted.platform === 'capacitor') {
+      const { Directory } = await import('@capacitor/filesystem');
+      const dirMap = Directory as unknown as Record<string, CapDirectory>;
+      const dir = dirMap[persisted.capDirectory ?? 'Documents'] ?? Directory.Documents;
+      const picked = await Fs.pickDirectory(dir);
+      rootEntry = {
+        kind: 'directory',
+        name: persisted.name || picked.name || dir,
+        path: picked.path ?? '',
+        capDirectory: dir,
+      };
+    }
+
+    if (!rootEntry) return;
+
+    const treeEntries = await Fs.buildTree(rootEntry);
+    const rootKey = rootEntry.path?.trim() || rootEntry.name || 'workspace';
+    const normalizedPath = rootEntry.path ?? rootKey;
+    explorerData.value = [
+      {
+        key: rootKey,
+        label: rootEntry.name || '工作区',
+        type: 'folder',
+        path: normalizedPath,
+        fsEntry: rootEntry,
+        children: convertFsTreeToExplorer(treeEntries, rootKey),
+        ...(rootEntry.webHandle
+          ? { handle: rootEntry.webHandle as FileSystemDirectoryHandle }
+          : {}),
+      },
+    ];
+    expandedKeys.value = [rootKey];
+    selectedKeys.value = [];
+    contextMenu.node = null;
+  } catch (error) {
+    console.warn('恢复最近打开的文件夹失败', error);
+  }
+}
+
+async function ensureDirectoryPermission(handle: FileSystemDirectoryHandle) {
+  const permissionable = handle as FileSystemDirectoryHandle & {
+    queryPermission?: (opts: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+    requestPermission?: (opts: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+  };
+  const state = (await permissionable.queryPermission?.({ mode: 'read' })) ?? 'prompt';
+  if (state === 'granted') return true;
+  const request = (await permissionable.requestPermission?.({ mode: 'read' })) ?? 'denied';
+  return request === 'granted';
 }
 
 function handleContextMenu(payload: unknown, maybeEvent?: MouseEvent) {
@@ -407,6 +498,7 @@ async function pickWorkspace() {
       expandedKeys.value = [rootNode.key];
       selectedKeys.value = [];
       contextMenu.node = null;
+      await persistLastWorkspace(rootEntry);
       return;
     } catch (error) {
       console.error('系统选择目录失败，使用默认目录', error);
@@ -424,6 +516,7 @@ async function pickWorkspace() {
       expandedKeys.value = [rootNode.key];
       selectedKeys.value = [];
       contextMenu.node = null;
+      await persistLastWorkspace(rootEntry);
       return;
     }
   }
@@ -449,9 +542,13 @@ async function pickWorkspace() {
     expandedKeys.value = [rootNode.key];
     selectedKeys.value = [];
     contextMenu.node = null;
+    await persistLastWorkspace(rootEntry);
   } catch (error) {
     const errorMessage = (error as Error)?.message;
-    if (errorMessage?.includes('文件系统访问不可用') || errorMessage?.includes('File System Access')) {
+    if (
+      errorMessage?.includes('文件系统访问不可用') ||
+      errorMessage?.includes('File System Access')
+    ) {
       // 使用新的详细错误信息，直接显示给用户
       window.alert(errorMessage);
       return;
@@ -485,6 +582,7 @@ async function handleCapRootSelect(key: string) {
     expandedKeys.value = [rootNode.key];
     selectedKeys.value = [];
     contextMenu.node = null;
+    await persistLastWorkspace(rootEntry);
   } catch (e) {
     console.error('选择根目录失败', e);
   } finally {

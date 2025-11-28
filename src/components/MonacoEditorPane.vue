@@ -8,7 +8,10 @@
         :class="{ active: file.path === workspace.currentFile?.path }"
         @click="activateTab(file.path)"
       >
-        <span class="tab-label">{{ file.name }}</span>
+        <span class="tab-label">
+          {{ file.name }}
+          <span v-if="isFileDirty(file)" class="tab-dirty" aria-hidden="true"></span>
+        </span>
         <button class="tab-close" type="button" @click.stop="closeTab(file.path)">×</button>
       </div>
       <div v-if="!workspace.openFiles.length" class="tab-placeholder">No Open Files</div>
@@ -30,7 +33,7 @@
 
     <div class="editor-body">
       <div v-if="!workspace.currentFile" class="welcome">
-        <div class="welcome-title">欢迎使用 Novel Helper</div>
+        <div class="welcome-title">欢迎使用 Novel Helper Lite</div>
         <div class="welcome-subtitle">在左侧选择文件或打开文件夹以开始</div>
         <div class="welcome-hint">支持文本编辑、图片预览、多标签</div>
       </div>
@@ -64,6 +67,7 @@ import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
 import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import { useWorkspaceStore } from 'src/stores/workspace';
+import type { OpenFile } from 'src/stores/workspace';
 import InlineImageViewer from './InlineImageViewer.vue';
 
 const g = self as typeof self & {
@@ -82,13 +86,23 @@ g.MonacoEnvironment = {
   },
 };
 
-const { state: workspace, updateCurrentContent, setActiveFile, closeFile } = useWorkspaceStore();
+const {
+  state: workspace,
+  updateCurrentContent,
+  markCurrentFileSaved,
+  setActiveFile,
+  closeFile,
+} = useWorkspaceStore();
 const editorEl = ref<HTMLDivElement | null>(null);
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 let disposables: monaco.IDisposable[] = [];
 
 const canSave = computed(
-  () => !!workspace.currentFile?.handle && workspace.currentFile.handle.kind === 'file' && !!editor,
+  () =>
+    !!workspace.currentFile &&
+    !!editor &&
+    ((workspace.currentFile.handle && workspace.currentFile.handle.kind === 'file') ||
+      workspace.currentFile.onSave),
 );
 const showMonaco = computed(() => !!workspace.currentFile && !workspace.currentFile.isImage);
 
@@ -170,14 +184,35 @@ function guessLanguage(filename: string) {
 }
 
 async function saveCurrentFile() {
-  if (!workspace.currentFile?.handle || workspace.currentFile.handle.kind !== 'file' || !editor)
-    return;
+  if (!workspace.currentFile || !editor) return;
 
-  const writable = await workspace.currentFile.handle.createWritable();
   const content = editor.getValue();
-  await writable.write(content);
-  await writable.close();
-  updateCurrentContent(content);
+
+  // 如果有自定义保存回调（例如设置文件），优先使用
+  if (workspace.currentFile.onSave) {
+    try {
+      await workspace.currentFile.onSave(content);
+      updateCurrentContent(content);
+      markCurrentFileSaved(content);
+      return;
+    } catch (error) {
+      console.error('保存失败:', error);
+      return;
+    }
+  }
+
+  // 原有的文件系统保存逻辑
+  if (!workspace.currentFile.handle || workspace.currentFile.handle.kind !== 'file') return;
+
+  try {
+    const writable = await workspace.currentFile.handle.createWritable();
+    await writable.write(content);
+    await writable.close();
+    updateCurrentContent(content);
+    markCurrentFileSaved(content);
+  } catch (error) {
+    console.error('保存文件失败:', error);
+  }
 }
 
 function activateTab(path: string) {
@@ -186,6 +221,10 @@ function activateTab(path: string) {
 
 function closeTab(path: string) {
   closeFile(path);
+}
+
+function isFileDirty(file: OpenFile) {
+  return file.content !== (file.savedContent ?? '');
 }
 
 function ensureEditorSync() {
@@ -274,6 +313,17 @@ function disposeEditor() {
 .tab-label {
   font-size: 12px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tab-dirty {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vscode-text);
+  opacity: 0.75;
 }
 
 .tab-close {

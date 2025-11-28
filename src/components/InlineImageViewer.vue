@@ -21,6 +21,13 @@
             :draggable="false"
           />
         </div>
+
+        <!-- 双指缩放中心点指示器 -->
+        <div
+          v-if="settingsStore.shouldShowPinchCenter && isPinching && canvasRef"
+          class="pinch-center-indicator"
+          :style="pinchCenterStyle"
+        ></div>
       </div>
     </div>
 
@@ -69,11 +76,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useSettingsStore } from 'src/stores/settings';
 
 const { src, name } = defineProps<{
   src: string;
   name?: string;
 }>();
+
+const settingsStore = useSettingsStore();
 
 const canvasRef = ref<HTMLElement | null>(null);
 
@@ -100,12 +110,34 @@ const initialPinchScale = ref(1);
 const pinchCenterX = ref(0);
 const pinchCenterY = ref(0);
 
+// 双指旋转状态
+const initialPinchAngle = ref(0);
+const initialPinchRotation = ref(0);
+
+// 双指平移状态
+const pinchOffsetX = ref(0);
+const pinchOffsetY = ref(0);
+
 const transformStyle = computed(() => {
   const sx = scale.value * (flipX.value ? -1 : 1);
   const sy = scale.value * (flipY.value ? -1 : 1);
 
   return {
     transform: `translate3d(${offsetX.value}px, ${offsetY.value}px, 0) rotate(${rotation.value}deg) scale(${sx}, ${sy})`,
+  };
+});
+
+// 双指缩放中心点样式（用于调试）
+const pinchCenterStyle = computed(() => {
+  if (!canvasRef.value) return {};
+
+  const rect = canvasRef.value.getBoundingClientRect();
+  const centerX = rect.width / 2 + pinchCenterX.value;
+  const centerY = rect.height / 2 + pinchCenterY.value;
+
+  return {
+    left: `${centerX}px`,
+    top: `${centerY}px`,
   };
 });
 
@@ -212,6 +244,12 @@ function getTouchDistance(t1: Touch, t2: Touch) {
   return Math.hypot(dx, dy);
 }
 
+function getTouchAngle(t1: Touch, t2: Touch) {
+  const dx = t2.clientX - t1.clientX;
+  const dy = t2.clientY - t1.clientY;
+  return Math.atan2(dy, dx) * 180 / Math.PI;
+}
+
 function onTouchStart(e: TouchEvent) {
   if (!src) return;
   if (e.touches.length === 1) {
@@ -221,11 +259,15 @@ function onTouchStart(e: TouchEvent) {
     panLastX.value = t.clientX;
     panLastY.value = t.clientY;
   } else if (e.touches.length === 2) {
-    // 双指缩放
+    // 双指手势
     isPinching.value = true;
     const [t1, t2] = [e.touches[0]!, e.touches[1]!];
+
+    // 保存当前变换状态
     initialPinchDistance.value = getTouchDistance(t1, t2);
     initialPinchScale.value = scale.value;
+    initialPinchRotation.value = rotation.value;
+    initialPinchAngle.value = getTouchAngle(t1, t2);
 
     // 计算双指中心位置
     if (!canvasRef.value) return;
@@ -236,6 +278,10 @@ function onTouchStart(e: TouchEvent) {
     // 保存双指中心相对于画布的坐标
     pinchCenterX.value = centerX - rect.left - rect.width / 2;
     pinchCenterY.value = centerY - rect.top - rect.height / 2;
+
+    // 保存初始偏移量
+    pinchOffsetX.value = offsetX.value;
+    pinchOffsetY.value = offsetY.value;
   }
 }
 
@@ -244,29 +290,45 @@ function onTouchMove(e: TouchEvent) {
   if (isPinching.value && e.touches.length === 2) {
     const [t1, t2] = [e.touches[0]!, e.touches[1]!];
     const dist = getTouchDistance(t1, t2);
+    const currentAngle = getTouchAngle(t1, t2);
 
     if (initialPinchDistance.value > 0) {
-      const ratio = dist / initialPinchDistance.value;
-      const newScale = clampScale(initialPinchScale.value * ratio);
-
       // 计算当前双指中心位置
       if (!canvasRef.value) return;
       const rect = canvasRef.value.getBoundingClientRect();
       const centerX = (t1.clientX + t2.clientX) / 2;
       const centerY = (t1.clientY + t2.clientY) / 2;
-      const mouseX = centerX - rect.left - rect.width / 2;
-      const mouseY = centerY - rect.top - rect.height / 2;
+      const currentCenterX = centerX - rect.left - rect.width / 2;
+      const currentCenterY = centerY - rect.top - rect.height / 2;
 
-      // 计算双指中心在世界坐标系中的位置（使用保存的初始位置）
-      const worldX = (pinchCenterX.value - offsetX.value) / scale.value;
-      const worldY = (pinchCenterY.value - offsetY.value) / scale.value;
+      // 1. 缩放
+      const ratio = dist / initialPinchDistance.value;
+      const newScale = clampScale(initialPinchScale.value * ratio);
 
-      // 应用新缩放
+      // 2. 旋转
+      const angleDiff = currentAngle - initialPinchAngle.value;
+      const newRotation = initialPinchRotation.value + angleDiff;
+
+      // 3. 平移 - 计算中心点移动
+      const centerMoveX = currentCenterX - pinchCenterX.value;
+      const centerMoveY = currentCenterY - pinchCenterY.value;
+
+      // 应用新的变换
       scale.value = newScale;
+      rotation.value = newRotation;
 
-      // 重新计算偏移量，使双指中心保持在屏幕上的同一位置
-      offsetX.value = mouseX - worldX * scale.value;
-      offsetY.value = mouseY - worldY * scale.value;
+      // 计算基于初始状态的偏移
+      // 初始世界坐标位置（相对于变换中心）
+      const worldX = pinchCenterX.value / initialPinchScale.value;
+      const worldY = pinchCenterY.value / initialPinchScale.value;
+
+      // 新的变换中心偏移
+      const transformCenterX = worldX * newScale;
+      const transformCenterY = worldY * newScale;
+
+      // 最终偏移 = 初始偏移 + 中心移动 + 变换调整
+      offsetX.value = pinchOffsetX.value + centerMoveX + (currentCenterX - transformCenterX);
+      offsetY.value = pinchOffsetY.value + centerMoveY + (currentCenterY - transformCenterY);
     }
   } else if (isPanning.value && e.touches.length === 1) {
     const t = e.touches[0]!;
@@ -284,6 +346,9 @@ function onTouchEnd() {
   if (isPinching.value) {
     isPinching.value = false;
     initialPinchDistance.value = 0;
+    initialPinchAngle.value = 0;
+    pinchOffsetX.value = 0;
+    pinchOffsetY.value = 0;
   }
   if (isPanning.value) {
     isPanning.value = false;
@@ -388,5 +453,32 @@ function onTouchEnd() {
 
 .viewer-hint {
   font-size: 11px;
+}
+
+/* 双指缩放中心点指示器（调试用） */
+.pinch-center-indicator {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #ff4444;
+  border-radius: 50%;
+  background: rgba(255, 68, 68, 0.8);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 0 10px rgba(255, 68, 68, 0.6);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.9);
+  }
+  100% {
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.6);
+  }
 }
 </style>

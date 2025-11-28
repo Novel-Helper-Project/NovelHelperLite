@@ -8,6 +8,8 @@ export type OpenFile = {
   mime?: string;
   mediaUrl?: string;
   isImage?: boolean;
+  onSave?: (content: string) => Promise<void> | void; // 自定义保存回调
+  savedContent?: string;
 };
 
 const state = reactive({
@@ -19,11 +21,17 @@ const state = reactive({
 function upsertAndFocus(file: OpenFile) {
   const idx = state.openFiles.findIndex((f) => f.path === file.path);
   if (idx >= 0) {
-    state.openFiles[idx] = { ...state.openFiles[idx], ...file };
-    state.currentFile = state.openFiles[idx];
+    const existing = state.openFiles[idx];
+    if (!existing) return;
+    const savedContent = file.savedContent ?? existing.savedContent ?? existing.content;
+    const merged: OpenFile = { ...existing, ...file, savedContent };
+    state.openFiles[idx] = merged;
+    state.currentFile = merged;
   } else {
-    state.openFiles.push(file);
-    state.currentFile = file;
+    const savedContent = file.savedContent ?? file.content;
+    const newFile: OpenFile = { ...file, savedContent };
+    state.openFiles.push(newFile);
+    state.currentFile = newFile;
   }
 }
 
@@ -47,11 +55,23 @@ function updateCurrentContent(content: string) {
   }
 }
 
+function markCurrentFileSaved(content: string) {
+  if (!state.currentFile) return;
+  const activePath = state.currentFile.path;
+  const idx = state.openFiles.findIndex((f) => f.path === activePath);
+  const savedContentEntry = idx >= 0 ? state.openFiles[idx] : state.currentFile;
+  if (!savedContentEntry) return;
+  savedContentEntry.savedContent = content;
+  if (state.currentFile.path === savedContentEntry.path) {
+    state.currentFile.savedContent = content;
+  }
+}
+
 function closeFile(path: string) {
   const idx = state.openFiles.findIndex((f) => f.path === path);
   if (idx < 0) return;
-  const closing = state.openFiles.splice(idx, 1)[0]!;
-  if (state.currentFile?.path === closing.path) {
+  const closing = state.openFiles.splice(idx, 1)[0];
+  if (closing && state.currentFile?.path === closing.path) {
     state.currentFile = state.openFiles[state.openFiles.length - 1] ?? null;
   }
 }
@@ -63,6 +83,7 @@ export function useWorkspaceStore() {
     setActiveFile,
     setRootHandle,
     updateCurrentContent,
+    markCurrentFileSaved,
     closeFile,
   };
 }
