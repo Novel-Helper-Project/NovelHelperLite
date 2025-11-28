@@ -15,9 +15,11 @@
     "postinstall": "quasar prepare"
   },
   "dependencies": {
+    "@capacitor/filesystem": "^7.1.5",
+    "@capawesome/capacitor-file-picker": "^7.2.0",
     "@quasar/extras": "^1.16.4",
-    "naive-ui": "^2.39.0",
     "monaco-editor": "^0.55.1",
+    "naive-ui": "^2.39.0",
     "quasar": "^2.16.0",
     "vue": "^3.5.22",
     "vue-router": "^4.0.12"
