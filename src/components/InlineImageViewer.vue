@@ -422,7 +422,7 @@ watch(
   right: 0;
   bottom: 0;
   border: 1px solid var(--vscode-border);
-  border-radius: 10px;
+  border-radius: 0;
   overflow: hidden;
   background: linear-gradient(180deg, #0f141c 0%, #0c1016 100%);
   z-index: 1;
@@ -484,7 +484,7 @@ watch(
   color: var(--vscode-muted);
   font-size: 12px;
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: 0;
   background: rgba(15, 18, 22, 0.85);
   backdrop-filter: blur(10px);
   border: 1px solid var(--vscode-border);

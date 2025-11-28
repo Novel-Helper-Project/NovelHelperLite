@@ -1,20 +1,25 @@
 <template>
   <div class="monaco-pane column gap-sm">
-    <div class="tabbar row items-center">
-      <div
-        v-for="file in workspace.openFiles"
-        :key="file.path"
-        class="tab"
-        :class="{ active: file.path === workspace.currentFile?.path }"
-        @click="activateTab(file.path)"
-      >
-        <span class="tab-label">
-          {{ file.name }}
-          <span v-if="isFileDirty(file)" class="tab-dirty" aria-hidden="true"></span>
-        </span>
-        <button class="tab-close" type="button" @click.stop="closeTab(file.path)">×</button>
+    <div ref="tabbarRef" class="tabbar">
+      <div ref="tabTrackRef" class="tab-track" :style="tabTrackStyle">
+        <div class="tab-spacer" :style="{ width: `${tabLayout.before}px` }" />
+        <template v-for="entry in tabLayout.visible" :key="entry.file.path">
+          <div
+            class="tab"
+            :class="{ active: entry.file.path === workspace.currentFile?.path }"
+            @click="activateTab(entry.file.path)"
+            :ref="(el) => setTabRef(entry.file.path, el as HTMLDivElement | null)"
+          >
+            <span class="tab-label">
+              {{ entry.file.name }}
+              <span v-if="isFileDirty(entry.file)" class="tab-dirty" aria-hidden="true"></span>
+            </span>
+            <button class="tab-close" type="button" @click.stop="closeTab(entry.file.path)">×</button>
+          </div>
+        </template>
+        <div class="tab-spacer" :style="{ width: `${tabLayout.after}px` }" />
+        <div v-if="!workspace.openFiles.length" class="tab-placeholder">No Open Files</div>
       </div>
-      <div v-if="!workspace.openFiles.length" class="tab-placeholder">No Open Files</div>
     </div>
 
     <div class="row items-center justify-between editor-toolbar">
@@ -23,7 +28,7 @@
           {{ workspace.currentFile?.name || '未选择文件' }}
         </div>
         <div class="text-caption text-grey-5">
-          {{ workspace.currentFile?.path || '请选择左侧文件以打开' }}
+          {{ currentPathLabel }}
         </div>
       </div>
       <div class="row items-center gap-sm">
@@ -61,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/min/vs/editor/editor.main.css';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
@@ -99,11 +104,65 @@ const {
   setEditorViewState,
 } = useWorkspaceStore();
 const editorEl = ref<HTMLDivElement | null>(null);
+const tabbarRef = ref<HTMLDivElement | null>(null);
+const tabTrackRef = ref<HTMLDivElement | null>(null);
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 let disposables: monaco.IDisposable[] = [];
 const viewStates = new Map<string, monaco.editor.ICodeEditorViewState | null>();
 let resizeObserver: ResizeObserver | null = null;
 let layoutRaf: number | null = null;
+let revealListener: ((event: Event) => void) | null = null;
+let pendingReveal: RevealDetail | null = null;
+let tabbarWheelListener: ((event: WheelEvent) => void) | null = null;
+let tabResizeObserver: ResizeObserver | null = null;
+const tabRefs = new Map<string, HTMLDivElement>();
+const tabScroll = ref(0);
+const tabMetrics = reactive({ viewport: 0, content: 0 });
+const tabSizes = new Map<string, number>();
+const tabSizesVersion = ref(0);
+const TAB_GAP = 4;
+const TAB_OVERSCAN = 120;
+
+const tabLayout = computed(() => {
+  // depend on sizes version
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  tabSizesVersion.value;
+  let acc = 0;
+  const positions: Array<{
+    file: OpenFile;
+    start: number;
+    end: number;
+  }> = [];
+  for (const file of workspace.openFiles) {
+    const width = tabSizes.get(file.path) ?? 120;
+    const start = acc;
+    const end = start + width;
+    positions.push({ file, start, end });
+    acc = end + TAB_GAP;
+  }
+  const total = acc > 0 ? acc - TAB_GAP : 0;
+  const viewport = tabMetrics.viewport || 0;
+  const windowStart = Math.max(0, tabScroll.value - TAB_OVERSCAN);
+  const windowEnd = tabScroll.value + viewport + TAB_OVERSCAN;
+  const visible = positions.filter((pos) => pos.end > windowStart && pos.start < windowEnd);
+  const firstVisible = visible[0];
+  const lastVisible = visible[visible.length - 1];
+  const before = firstVisible ? firstVisible.start : 0;
+  const lastEnd = lastVisible ? lastVisible.end : 0;
+  const after = Math.max(0, total - lastEnd);
+  const visibleWidth = firstVisible && lastVisible ? lastEnd - firstVisible.start : 0;
+  return {
+    total,
+    visible,
+    before,
+    after,
+    visibleWidth,
+  };
+});
+
+const tabTrackStyle = computed(() => ({
+  transform: `translateX(-${tabScroll.value}px)`,
+}));
 
 const canSave = computed(
   () =>
@@ -119,6 +178,12 @@ const imageFiles = computed(() =>
 const currentImage = computed(() =>
   workspace.currentFile && workspace.currentFile.isImage ? workspace.currentFile : null,
 );
+const currentPathLabel = computed(() => {
+  const path = workspace.currentFile?.path;
+  if (!path) return '请选择左侧文件以打开';
+  const normalized = path.replace(/^\\+/, '/');
+  return normalized.replace(/^\/+/, '/');
+});
 
 onMounted(() => {
   void ensureEditor();
@@ -129,6 +194,18 @@ onMounted(() => {
     resizeObserver.observe(el);
   }
   window.addEventListener('resize', layoutEditor);
+  revealListener = (event: Event) => handleRevealEvent(event);
+  window.addEventListener('workspace-reveal', revealListener);
+  tabbarWheelListener = (event: WheelEvent) => handleTabbarWheel(event);
+  tabbarRef.value?.addEventListener('wheel', tabbarWheelListener, { passive: false });
+  measureTabs();
+  if ('ResizeObserver' in window) {
+    tabResizeObserver = new ResizeObserver(() => measureTabs());
+    const host = tabbarRef.value;
+    const track = tabTrackRef.value;
+    if (host) tabResizeObserver.observe(host);
+    if (track) tabResizeObserver.observe(track);
+  }
 
   watch(
     () => workspace.currentFile,
@@ -172,6 +249,8 @@ onMounted(() => {
         instance.restoreViewState(viewState);
       }
       layoutEditor();
+      applyPendingReveal();
+      ensureActiveTabVisible();
     },
     { immediate: true },
   );
@@ -186,6 +265,33 @@ onMounted(() => {
     },
     { immediate: true },
   );
+
+  watch(
+    () => workspace.openFiles.length,
+    () => {
+      void nextTick(() => {
+        measureTabs();
+        ensureActiveTabVisible();
+      });
+    },
+  );
+
+  watch(
+    () => workspace.openFiles.map((f) => f.path).join('|'),
+    () => {
+      void nextTick(() => {
+        measureTabs();
+        ensureActiveTabVisible();
+      });
+    },
+  );
+
+  watch(
+    () => tabLayout.value.total,
+    () => {
+      clampTabScroll();
+    },
+  );
 });
 
 onBeforeUnmount(() => {
@@ -198,8 +304,108 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(layoutRaf);
     layoutRaf = null;
   }
+  if (revealListener) {
+    window.removeEventListener('workspace-reveal', revealListener);
+    revealListener = null;
+  }
+  if (tabbarWheelListener && tabbarRef.value) {
+    tabbarRef.value.removeEventListener('wheel', tabbarWheelListener);
+  }
+  if (tabResizeObserver) {
+    tabResizeObserver.disconnect();
+    tabResizeObserver = null;
+  }
   window.removeEventListener('resize', layoutEditor);
 });
+
+type RevealDetail = { path: string; line: number; column?: number };
+
+function handleRevealEvent(event: Event) {
+  const detail = (event as CustomEvent<RevealDetail>).detail;
+  if (!detail) return;
+  pendingReveal = detail;
+  applyPendingReveal();
+}
+
+function handleTabbarWheel(event: WheelEvent) {
+  const host = tabbarRef.value;
+  if (!host) return;
+  // 将纵向滚动转为横向滚动
+  const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+  if (delta === 0) return;
+  event.preventDefault();
+  updateTabScroll(tabScroll.value + delta);
+}
+
+function applyPendingReveal() {
+  if (!pendingReveal) return;
+  if (!workspace.currentFile || workspace.currentFile.path !== pendingReveal.path) return;
+  if (!editor) return;
+  const position = { lineNumber: pendingReveal.line, column: pendingReveal.column ?? 1 };
+  editor.revealPositionInCenter(position);
+  editor.setPosition(position);
+  editor.focus();
+  pendingReveal = null;
+}
+
+function measureTabs() {
+  const host = tabbarRef.value;
+  if (!host) return;
+  tabMetrics.viewport = host.clientWidth;
+  let content = 0;
+  for (const file of workspace.openFiles) {
+    const width = tabRefs.get(file.path)?.offsetWidth ?? 120;
+    tabSizes.set(file.path, width);
+    content += width + TAB_GAP;
+  }
+  tabMetrics.content = content > 0 ? content - TAB_GAP : 0;
+  tabSizesVersion.value += 1;
+  clampTabScroll();
+}
+
+function clampTabScroll() {
+  const max = Math.max(0, (tabLayout.value.total || tabMetrics.content) - tabMetrics.viewport);
+  tabScroll.value = Math.max(0, Math.min(tabScroll.value, max));
+}
+
+function updateTabScroll(next: number) {
+  tabScroll.value = next;
+  clampTabScroll();
+}
+
+function setTabRef(path: string, el: HTMLDivElement | null) {
+  if (el) {
+    tabRefs.set(path, el);
+  } else {
+    tabRefs.delete(path);
+  }
+}
+
+function ensureActiveTabVisible() {
+  if (!workspace.currentFile) return;
+  const pos = getTabPosition(workspace.currentFile.path);
+  if (!pos) return;
+  const hostWidth = tabMetrics.viewport;
+  const current = tabScroll.value;
+  const visibleEnd = current + hostWidth;
+  if (pos.start < current) {
+    updateTabScroll(pos.start);
+  } else if (pos.end > visibleEnd) {
+    updateTabScroll(pos.end - hostWidth);
+  }
+}
+
+function getTabPosition(path: string): { start: number; end: number } | null {
+  let acc = 0;
+  for (const file of workspace.openFiles) {
+    const width = tabSizes.get(file.path) ?? 120;
+    const start = acc;
+    const end = start + width;
+    if (file.path === path) return { start, end };
+    acc = end + TAB_GAP;
+  }
+  return null;
+}
 
 function guessLanguage(filename: string) {
   const ext = filename.split('.').pop()?.toLowerCase();
@@ -269,6 +475,7 @@ async function saveCurrentFile() {
 
 function activateTab(path: string) {
   setActiveFile(path);
+  void nextTick(() => ensureActiveTabVisible());
 }
 
 function closeTab(path: string) {
@@ -345,10 +552,29 @@ function disposeEditor() {
 .tabbar {
   height: 36px;
   border: 1px solid var(--vscode-border);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 0 4px;
   background: #1c222c;
-  overflow-x: auto;
+  overflow: hidden;
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.tab-track {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  will-change: transform;
+  transition: transform 0.08s ease-out;
+}
+
+.tab-spacer {
+  flex: 0 0 auto;
 }
 
 .tab {
@@ -356,8 +582,9 @@ function disposeEditor() {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
+  flex: 0 0 auto;
   margin-right: 4px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   color: var(--vscode-muted);
   transition:
@@ -420,8 +647,8 @@ function disposeEditor() {
   flex-direction: column;
   background: #0f1216;
   border: 1px solid var(--vscode-border);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: 0;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -445,6 +672,11 @@ function disposeEditor() {
   font-size: 13px;
 }
 
+.editor-toolbar {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 .image-viewer {
   flex: 1;
   display: flex;
@@ -457,7 +689,7 @@ function disposeEditor() {
   display: grid;
   place-items: center;
   border: 1px dashed var(--vscode-border);
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--vscode-muted);
   background: #0f1216;
   font-size: 13px;

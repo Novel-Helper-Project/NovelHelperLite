@@ -41,8 +41,14 @@
         <span class="panel-subtitle">侧栏</span>
       </div>
       <div class="panel-body">
-        <FileExplorer v-show="activeTab === 'explorer'" />
-        <PanelPlaceholder v-show="activeTab !== 'explorer'" :label="activeTabLabel" />
+        <div class="panel-scroll">
+          <FileExplorer v-show="activeTab === 'explorer'" />
+          <SearchPanel v-show="activeTab === 'search'" />
+          <PanelPlaceholder
+            v-show="activeTab !== 'explorer' && activeTab !== 'search'"
+            :label="activeTabLabel"
+          />
+        </div>
       </div>
     </section>
 
@@ -58,6 +64,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue';
 import FileExplorer from './FileExplorer.vue';
+import SearchPanel from './SearchPanel.vue';
 import { useWorkspaceStore } from 'src/stores/workspace';
 import { useSettingsStore } from 'src/stores/settings';
 import { storage } from 'src/services/storage';
@@ -355,6 +362,7 @@ onBeforeUnmount(() => {
 .sidebar-panel {
   width: 240px;
   min-width: 240px;
+  height: 100%;
   background-color: var(--vscode-sideBar-background);
   border-right: 1px solid var(--vscode-sideBar-border);
   display: flex;
@@ -376,6 +384,28 @@ onBeforeUnmount(() => {
 .sidebar-panel * {
   opacity: 1;
   transition: opacity 0.15s ease-in-out;
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  overflow: hidden;
+}
+
+.panel-scroll {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  padding: 0;
 }
 
 /* 活动栏底部按钮组 */

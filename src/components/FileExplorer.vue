@@ -75,24 +75,59 @@
       @update:show="capRootMenu.show = $event"
     />
 
-    <n-scrollbar class="explorer-scroll">
-      <n-tree
-        class="vscode-tree"
-        block-line
-        draggable
-        cascade
-        selectable
-        :data="explorerData"
-        :expanded-keys="expandedKeys"
-        :selected-keys="selectedKeys"
-        :allow-drop="allowDrop"
-        :render-prefix="renderPrefix"
-        @update:expanded-keys="expandedKeys = $event"
-        @update:selected-keys="handleSelect"
-        @drop="handleDrop"
-        @node-contextmenu="handleContextMenu"
-      />
-    </n-scrollbar>
+    <div class="explorer-trees">
+      <TreePanel
+        v-if="openFiles.length"
+        class="tree-section"
+        title="已打开的编辑器"
+        :count="openFiles.length"
+        v-model="openedExpanded"
+        :resizable="true"
+        :height="openedHeight"
+        :min-height="MIN_OPENED_HEIGHT"
+        :max-height="MAX_OPENED_HEIGHT"
+        @update:height="openedHeight = $event"
+      >
+        <n-scrollbar class="tree-scroll" style="height: 100%;">
+          <n-tree
+            block-line
+            :data="openedTreeData"
+            :selected-keys="openedSelected"
+            :render-prefix="renderOpenedPrefix"
+            :render-suffix="renderOpenedSuffix"
+            :style="{ minHeight: '100%' }"
+            @update:selected-keys="handleOpenedSelect"
+          />
+        </n-scrollbar>
+      </TreePanel>
+
+      <TreePanel
+        class="tree-section explorer-tree"
+        title="文件资源管理器"
+        v-model="explorerExpanded"
+        :collapsible="true"
+      >
+        <n-scrollbar class="explorer-scroll tree-scroll">
+          <n-tree
+            class="vscode-tree"
+            block-line
+            draggable
+            cascade
+            selectable
+            :data="explorerData"
+            :expanded-keys="expandedKeys"
+            :selected-keys="selectedKeys"
+            :allow-drop="allowDrop"
+            :render-prefix="renderPrefix"
+            :style="{ minHeight: '100%' }"
+            @update:expanded-keys="expandedKeys = $event"
+            @update:selected-keys="handleSelect"
+            @drop="handleDrop"
+            @node-contextmenu="handleContextMenu"
+          />
+        </n-scrollbar>
+      </TreePanel>
+    </div>
   </div>
 </template>
 
@@ -100,7 +135,7 @@
 import { computed, h, reactive, ref, onMounted } from 'vue';
 import { NDropdown, NScrollbar, NTree } from 'naive-ui';
 import type { TreeDropInfo, TreeOption } from 'naive-ui';
-import { useWorkspaceStore } from 'src/stores/workspace';
+import { useWorkspaceStore, type OpenFile } from 'src/stores/workspace';
 import Fs, { type FsEntry, checkFileSystemSupport } from 'src/services/fs';
 import {
   persistLastWorkspace,
@@ -108,6 +143,7 @@ import {
   getPersistedDirectoryHandle,
 } from 'src/services/workspacePersistence';
 import type { Directory as CapDirectory } from '@capacitor/filesystem';
+import TreePanel from './TreePanel.vue';
 
 type ExplorerNode = TreeOption & {
   key: string;
@@ -120,6 +156,7 @@ type ExplorerNode = TreeOption & {
 };
 
 const explorerData = ref<ExplorerNode[]>([]);
+const explorerExpanded = ref(true);
 
 const isCapacitor = Fs.getPlatform() === 'capacitor';
 
@@ -136,7 +173,8 @@ const contextMenu = reactive({
   node: null as ExplorerNode | null,
 });
 
-const { upsertAndFocus, setRootHandle, switchWorkspace } = useWorkspaceStore();
+const { state: workspace, upsertAndFocus, setRootHandle, switchWorkspace, setActiveFile, closeFile } =
+  useWorkspaceStore();
 
 const contextMenuOptions = computed(() => [
   { label: '新建文件', key: 'new-file' },
@@ -154,6 +192,21 @@ const capRootOptions = computed(() => [
   { label: 'ExternalStorage', key: 'ExternalStorage' },
 ]);
 
+const openFiles = computed(() => workspace.openFiles);
+const openedExpanded = ref(true);
+const openedSelected = computed(() => (workspace.currentFile ? [workspace.currentFile.path] : []));
+const openedHeight = ref(220);
+const MIN_OPENED_HEIGHT = 80;
+const MAX_OPENED_HEIGHT = 400;
+const openedTreeData = computed<TreeOption[]>(() =>
+  openFiles.value.map((file) => ({
+    key: file.path,
+    label: file.name,
+    path: file.path,
+    isDirty: isDirty(file),
+  })),
+);
+
 onMounted(() => {
   void restoreLastWorkspace();
 });
@@ -162,6 +215,42 @@ function renderPrefix({ option }: { option: TreeOption }) {
   const node = option as ExplorerNode;
   const iconName = node.type === 'folder' ? 'folder' : 'insert_drive_file';
   return h('span', { class: 'material-icons tree-icon' }, iconName);
+}
+
+function isDirty(file: OpenFile) {
+  return file.content !== (file.savedContent ?? '');
+}
+
+function closeTab(path: string) {
+  closeFile(path);
+}
+
+function renderOpenedPrefix({ option }: { option: TreeOption }) {
+  const isActive = option.key === workspace.currentFile?.path;
+  const dirty = (option as unknown as { isDirty?: boolean }).isDirty;
+  return h('span', { class: ['opened-dot', { dirty, active: isActive }] });
+}
+
+function renderOpenedSuffix({ option }: { option: TreeOption }) {
+  const path = option.key as string;
+  return h(
+    'button',
+    {
+      class: 'opened-close',
+      type: 'button',
+      onClick: (e: MouseEvent) => {
+        e.stopPropagation();
+        closeTab(path);
+      },
+    },
+    '×',
+  );
+}
+
+function handleOpenedSelect(keys: (string | number)[]) {
+  if (!keys.length) return;
+  const path = keys[0] as string;
+  setActiveFile(path);
 }
 
 type AllowDropInfo = {
@@ -843,5 +932,177 @@ function showCompatibilityHelp() {
   align-items: center;
   font-weight: 600;
   color: var(--vscode-text);
+}
+
+.opened-tree {
+  height: 100%;
+  overflow: hidden;
+  padding-right: 2px;
+}
+
+.opened-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vscode-muted);
+  margin-right: 6px;
+}
+
+.opened-dot.dirty {
+  background: #e36a76;
+}
+
+.opened-dot.active {
+  box-shadow: 0 0 0 2px rgba(77, 171, 247, 0.3);
+}
+
+.opened-close {
+  border: none;
+  background: transparent;
+  color: var(--vscode-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.opened-close:hover {
+  color: #fff;
+}
+
+.explorer-trees {
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 48px);
+  min-height: 0;
+}
+
+.explorer-tree {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.tree-section {
+  min-height: 0;
+}
+
+:deep(.tree-scroll) {
+  height: 100%;
+}
+
+:deep(.tree-scroll .n-tree) {
+  background: transparent;
+  color: var(--vscode-foreground, #e8ecf3);
+  font-size: 12px;
+  --n-node-color-hover: rgba(60, 125, 200, 0.18);
+  --n-node-color-pressed: rgba(60, 125, 200, 0.2);
+  --n-node-color-active: rgba(77, 171, 247, 0.18);
+  --n-node-text-color: var(--vscode-foreground, #e8ecf3);
+  --n-node-text-color-disabled: #8a93a3;
+  --n-node-text-color-active: #f7fbff;
+}
+
+:deep(.tree-scroll .n-tree-node) {
+  border-radius: 4px;
+}
+
+:deep(.tree-scroll .n-tree-node-wrapper) {
+  border-radius: 4px;
+  background: transparent !important;
+}
+
+:deep(.tree-scroll .n-tree-node-wrapper:hover) {
+  background: rgba(60, 125, 200, 0.18) !important;
+  color: #e8ecf3;
+}
+
+:deep(.tree-scroll .n-tree-node-wrapper::before) {
+  background: transparent !important;
+}
+
+:deep(.tree-scroll .n-tree-node-wrapper .n-tree-node) {
+  background: transparent !important;
+}
+
+:deep(.tree-scroll .n-tree-node-wrapper .n-tree-node--selected) {
+  background: rgba(62, 148, 110, 0.28) !important; /* green-ish */
+  color: #f7fbff !important;
+}
+
+:deep(.tree-scroll .n-tree-node-content) {
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.12s ease, color 0.12s ease;
+  color: var(--vscode-foreground, #e8ecf3);
+}
+
+:deep(.tree-scroll .n-tree-node-content::before),
+:deep(.tree-scroll .n-tree-node-content .n-tree-node-content__state-layer) {
+  background: transparent !important;
+}
+
+:deep(.tree-scroll .n-tree-node-content:hover) {
+  background: transparent;
+  color: #e8ecf3;
+}
+
+:deep(.tree-scroll .n-tree-node--selected .n-tree-node-content) {
+  background: transparent !important;
+  color: #f7fbff !important;
+}
+
+:deep(.tree-scroll .n-tree-node-content .n-tree-node-content__text) {
+  color: var(--vscode-foreground, #e8ecf3);
+}
+
+:deep(.tree-scroll .n-tree-node-switcher) {
+  color: var(--vscode-muted);
+}
+
+:deep(.tree-scroll .n-tree-node-content .n-tree-node-content__prefix) {
+  color: var(--vscode-muted);
+}
+
+:deep(.tree-scroll .n-tree-node--selected .n-tree-node-content .n-tree-node-content__prefix),
+:deep(.tree-scroll .n-tree-node-content:hover .n-tree-node-content__prefix) {
+  color: #eaf3ff;
+}
+
+.opened-close {
+  border: none;
+  background: transparent;
+  color: var(--vscode-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.opened-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+:deep(.opened-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--vscode-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--vscode-foreground, #e8ecf3);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  border-radius: 4px;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+:deep(.opened-close:hover) {
+  background: rgba(77, 171, 247, 0.2);
+  border-color: rgba(77, 171, 247, 0.6);
+  color: #fff;
 }
 </style>
