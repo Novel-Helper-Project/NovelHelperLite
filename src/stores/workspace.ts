@@ -7,6 +7,11 @@ import {
   type PersistedWorkspaceState,
 } from 'src/services/workspaceState';
 import type { EditorViewState, ImageViewState } from 'src/types/editorState';
+import { storage } from 'src/services/storage';
+
+const MAX_PERSIST_CONTENT_LENGTH = 400_000; // ~400 KB
+const MAX_PERSIST_STATE_SIZE = 900_000; // ~900 KB JSON length safeguard
+const CONTENT_KEY_PREFIX = 'workspace.content';
 
 export type OpenFile = {
   path: string;
@@ -107,12 +112,37 @@ function setEditorViewState(path: string, viewState: EditorViewState | null | un
   schedulePersist();
 }
 
-function serializeOpenFile(file: OpenFile): PersistedOpenFile {
+function buildContentKey(workspaceId: string, path: string, kind: 'content' | 'saved') {
+  return `${CONTENT_KEY_PREFIX}:${encodeURIComponent(workspaceId)}:${kind}:${encodeURIComponent(path)}`;
+}
+
+async function serializeOpenFile(
+  workspaceId: string,
+  file: OpenFile,
+): Promise<PersistedOpenFile> {
+  const rawContent = file.content ?? '';
+  const rawSaved = file.savedContent ?? undefined;
+
+  const contentKey = buildContentKey(workspaceId, file.path, 'content');
+  const savedContentKey = buildContentKey(workspaceId, file.path, 'saved');
+
+  if (rawContent.length > MAX_PERSIST_CONTENT_LENGTH) {
+    console.warn(
+      `跳过持久化过大的文件内容: ${file.path} (${rawContent.length} chars > ${MAX_PERSIST_CONTENT_LENGTH})`,
+    );
+  } else {
+    await storage.set(contentKey, rawContent);
+  }
+
+  if (rawSaved && rawSaved.length <= MAX_PERSIST_CONTENT_LENGTH) {
+    await storage.set(savedContentKey, rawSaved);
+  }
+
   return {
     path: file.path,
     name: file.name,
-    content: file.content ?? '',
-    savedContent: file.savedContent,
+    contentKey,
+    savedContentKey: rawSaved ? savedContentKey : undefined,
     mime: file.mime,
     isImage: file.isImage,
     imageState: file.imageState,
@@ -120,9 +150,17 @@ function serializeOpenFile(file: OpenFile): PersistedOpenFile {
   };
 }
 
-function serializeState(): PersistedWorkspaceState {
+async function serializeState(): Promise<PersistedWorkspaceState> {
+  const workspaceId = state.workspaceId;
+  if (!workspaceId) {
+    return { openFiles: [], currentFilePath: null };
+  }
+  const serializedFiles: PersistedOpenFile[] = [];
+  for (const file of state.openFiles) {
+    serializedFiles.push(await serializeOpenFile(workspaceId, file));
+  }
   return {
-    openFiles: state.openFiles.map(serializeOpenFile),
+    openFiles: serializedFiles,
     currentFilePath: state.currentFile?.path ?? null,
   };
 }
@@ -140,7 +178,14 @@ function schedulePersist() {
 
 async function persistState() {
   if (!state.workspaceId) return;
-  const payload = serializeState();
+  const payload = await serializeState();
+  const serialized = JSON.stringify(payload);
+  if (serialized.length > MAX_PERSIST_STATE_SIZE) {
+    console.warn(
+      `工作区状态过大，已跳过保存 (约 ${serialized.length} chars > ${MAX_PERSIST_STATE_SIZE})`,
+    );
+    return;
+  }
   try {
     await saveWorkspaceState(state.workspaceId, payload);
   } catch (error) {
@@ -179,11 +224,37 @@ async function resolveWebFileHandle(fullPath: string): Promise<FileSystemFileHan
 }
 
 async function hydrateOpenFile(file: PersistedOpenFile): Promise<OpenFile> {
+  const workspaceId = state.workspaceId;
+  let content = file.content ?? '';
+  let savedContent = file.savedContent;
+
+  if (workspaceId && file.contentKey) {
+    try {
+      const stored = await storage.get<string>(file.contentKey);
+      if (typeof stored === 'string') {
+        content = stored;
+      }
+    } catch (e) {
+      console.warn('读取文件内容失败，使用回退内容', e);
+    }
+  }
+
+  if (workspaceId && file.savedContentKey) {
+    try {
+      const stored = await storage.get<string>(file.savedContentKey);
+      if (typeof stored === 'string') {
+        savedContent = stored;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const base: OpenFile = {
     path: file.path,
     name: file.name,
-    content: file.content ?? '',
-    savedContent: file.savedContent,
+    content,
+    savedContent,
     mime: file.mime,
     isImage: file.isImage,
     handle: null,

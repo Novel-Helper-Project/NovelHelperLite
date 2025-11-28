@@ -93,6 +93,7 @@ const settingsStore = useSettingsStore();
 
 const canvasRef = ref<HTMLElement | null>(null);
 
+const BASE_SCALE = 0.9;
 const scale = ref(1);
 const rotation = ref(0); // deg
 const offsetX = ref(0);
@@ -132,7 +133,7 @@ const transformStyle = computed(() => {
   const sy = scale.value * (flipY.value ? -1 : 1);
 
   return {
-    transform: `translate3d(${offsetX.value}px, ${offsetY.value}px, 0) rotate(${rotation.value}deg) scale(${sx}, ${sy})`,
+    transform: `translate3d(${offsetX.value}px, ${offsetY.value}px, 0) rotate(${rotation.value}deg) scale(${sx * BASE_SCALE}, ${sy * BASE_SCALE})`,
   };
 });
 
@@ -484,7 +485,7 @@ watch(
   color: var(--vscode-muted);
   font-size: 12px;
   padding: 6px 8px;
-  border-radius: 0;
+  border-radius: 8px;
   background: rgba(15, 18, 22, 0.85);
   backdrop-filter: blur(10px);
   border: 1px solid var(--vscode-border);

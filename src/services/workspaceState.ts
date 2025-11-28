@@ -4,8 +4,10 @@ import type { ImageViewState, EditorViewState } from 'src/types/editorState';
 export interface PersistedOpenFile {
   path: string;
   name: string;
-  content: string;
+  content?: string | undefined;
+  contentKey?: string | undefined;
   savedContent?: string | undefined;
+  savedContentKey?: string | undefined;
   mime?: string | undefined;
   isImage?: boolean | undefined;
   imageState?: ImageViewState | undefined;
