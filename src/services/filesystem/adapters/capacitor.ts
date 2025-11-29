@@ -1,9 +1,11 @@
-import type { Directory as CapDirectory, FileInfo } from '@capacitor/filesystem';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Directory, Encoding, Filesystem, type FileInfo, type Directory as CapDirectory } from '@capacitor/filesystem';
+import { Device } from '@capacitor/device';
+import { FilePicker } from '@capawesome/capacitor-file-picker';
 import type { FsEntry, FsStat } from '../types';
 
 export async function ensureMobilePermissions(): Promise<void> {
   try {
-    const { FilePicker } = await import('@capawesome/capacitor-file-picker');
     const fp = await FilePicker.checkPermissions();
     const granted =
       (fp as unknown as { status?: string; state?: string }).status === 'granted' ||
@@ -13,7 +15,6 @@ export async function ensureMobilePermissions(): Promise<void> {
     console.warn('FilePicker 权限检查失败', e);
   }
   try {
-    const { Filesystem } = await import('@capacitor/filesystem');
     const fsPerm = await Filesystem.checkPermissions();
     const granted =
       (fsPerm as unknown as { publicStorage?: string; status?: string; state?: string })
@@ -25,25 +26,44 @@ export async function ensureMobilePermissions(): Promise<void> {
     console.warn('Filesystem 权限检查失败', e);
   }
   try {
-    const { registerPlugin } = await import('@capacitor/core');
-    const AllFilesPermission = registerPlugin<{
-      check: () => Promise<{ granted: boolean }>;
-      request: () => Promise<{ requested: boolean }>;
-    }>('AllFilesPermission');
-    const res = await AllFilesPermission.check();
-    if (!res.granted) await AllFilesPermission.request();
+    // 针对 Android 11+ 的“所有文件访问权限”
+    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+      const info = await Device.getInfo();
+      const apiLevel = parseInt(info.osVersion, 10);
+      // MANAGE_EXTERNAL_STORAGE 权限仅在 Android 11 (API 30) 及以上版本需要
+      if (apiLevel >= 30) {
+        const AllFilesPermission = registerPlugin<{
+          check: () => Promise<{ granted: boolean }>;
+          request: () => Promise<void>; // 通常是打开设置页面
+          openAppSettings?: () => Promise<void>; // 设为可选，以防插件没有此方法
+        }>('AllFilesPermission');
+
+        const permStatus = await AllFilesPermission.check();
+        if (!permStatus.granted) {
+          // 关键：引导用户去设置页面手动开启
+          // 很多插件的 request() 方法就是打开设置页面的实现
+          console.log('Android 11+，所有文件访问权限未授予，正在尝试引导用户到设置页面...');
+          // 弹出提示，告知用户为何需要此权限以及如何操作
+          // 此处用 alert 简化，实际项目中建议使用更友好的 UI 组件
+          alert(
+            '为了正常读取和管理设备上的文档，需要您授予“所有文件访问权限”。即将跳转到应用设置页面，请找到并开启此权限。',
+          );
+          await AllFilesPermission.request(); // 大多数插件的 request() 会打开设置
+        }
+      } else {
+        console.log(`Android API Level (${apiLevel}) 低于 30，跳过所有文件访问权限检查。`);
+      }
+    }
   } catch (e) {
     console.warn('AllFiles 权限请求失败', e);
   }
 }
 
-export async function pickDirectory(dir?: CapDirectory): Promise<FsEntry> {
-  const { Directory } = await import('@capacitor/filesystem');
-  return { kind: 'directory', name: '', path: '', capDirectory: dir ?? Directory.Documents };
+export function pickDirectory(dir?: CapDirectory): Promise<FsEntry> {
+  return Promise.resolve({ kind: 'directory', name: '', path: '', capDirectory: dir ?? Directory.Documents });
 }
 
 export async function list(dir: FsEntry): Promise<FsEntry[]> {
-  const { Filesystem, Directory } = await import('@capacitor/filesystem');
   const base = dir.path ?? '';
   const directory: CapDirectory = dir.capDirectory ?? Directory.Documents;
   const { files } = await Filesystem.readdir({ path: base, directory });
@@ -52,8 +72,7 @@ export async function list(dir: FsEntry): Promise<FsEntry[]> {
   for (const fi of list) {
     const name = typeof fi === 'string' ? fi : fi.name;
     const childPath = joinPath(base, name);
-    const type = typeof fi === 'string' ? undefined : fi.type;
-    let kind: 'file' | 'directory' | undefined = type;
+    let kind: 'file' | 'directory' | undefined = typeof fi === 'string' ? undefined : fi.type;
     if (!kind) {
       const s = await Filesystem.stat({ path: childPath, directory });
       kind = s.type === 'directory' ? 'directory' : 'file';
@@ -67,14 +86,12 @@ export async function list(dir: FsEntry): Promise<FsEntry[]> {
 }
 
 export async function stat(entry: FsEntry): Promise<FsStat> {
-  const { Filesystem, Directory } = await import('@capacitor/filesystem');
   const directory: CapDirectory = entry.capDirectory ?? Directory.Documents;
   const s = await Filesystem.stat({ path: entry.path ?? '', directory });
   return { kind: s.type === 'directory' ? 'directory' : 'file', size: s.size, modified: s.mtime };
 }
 
 export async function readText(entry: FsEntry): Promise<string> {
-  const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
   const directory: CapDirectory = entry.capDirectory ?? Directory.Documents;
   const { data } = await Filesystem.readFile({
     path: entry.path ?? '',
@@ -85,7 +102,6 @@ export async function readText(entry: FsEntry): Promise<string> {
 }
 
 export async function getBlob(entry: FsEntry): Promise<Blob> {
-  const { Filesystem, Directory } = await import('@capacitor/filesystem');
   const directory = entry.capDirectory ?? Directory.Documents;
   const { data } = await Filesystem.readFile({ path: entry.path ?? '', directory });
   const base64 = typeof data === 'string' ? data : await data.text();
@@ -100,7 +116,6 @@ export async function writeText(
   name: string,
   content: string,
 ): Promise<FsEntry> {
-  const { Filesystem, Encoding, Directory } = await import('@capacitor/filesystem');
   const base = targetDir.path ?? '';
   const directory = targetDir.capDirectory ?? Directory.Documents;
   const filePath = joinPath(base, name);
@@ -115,7 +130,6 @@ export async function writeText(
 }
 
 export async function mkdir(targetDir: FsEntry, name: string): Promise<FsEntry> {
-  const { Filesystem, Directory } = await import('@capacitor/filesystem');
   const base = targetDir.path ?? '';
   const directory = targetDir.capDirectory ?? Directory.Documents;
   const dirPath = joinPath(base, name);
@@ -124,7 +138,6 @@ export async function mkdir(targetDir: FsEntry, name: string): Promise<FsEntry> 
 }
 
 export async function remove(entry: FsEntry): Promise<void> {
-  const { Filesystem, Directory } = await import('@capacitor/filesystem');
   const path = entry.path ?? '';
   const dir = entry.capDirectory ?? Directory.Documents;
   if (entry.kind === 'directory') {

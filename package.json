@@ -27,6 +27,7 @@
     "postinstall": "quasar prepare"
   },
   "dependencies": {
+    "@capacitor/device": "^7.0.2",
     "@capacitor/filesystem": "^7.1.5",
     "@capacitor/preferences": "^7.0.2",
     "@capawesome/capacitor-file-picker": "^7.2.0",
