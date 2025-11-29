@@ -17,22 +17,34 @@ export type OpenFile = {
   path: string;
   name: string;
   content: string;
-  handle?: FileSystemFileHandle | null | undefined;
-  mime?: string | undefined;
-  mediaUrl?: string | undefined;
-  isImage?: boolean | undefined;
-  onSave?: ((content: string) => Promise<void> | void) | undefined; // 自定义保存回调
-  savedContent?: string | undefined;
-  imageState?: ImageViewState | undefined;
-  viewState?: EditorViewState | undefined;
+  handle?: FileSystemFileHandle | null;
+  mime?: string;
+  mediaUrl?: string;
+  isImage?: boolean;
+  onSave?: (content: string) => Promise<void> | void; // 自定义保存回调
+  savedContent?: string;
+  imageState?: ImageViewState;
+  viewState?: EditorViewState;
 };
 
-const state = reactive({
-  openFiles: [] as OpenFile[],
-  currentFile: null as OpenFile | null,
-  rootHandle: null as FileSystemDirectoryHandle | null,
-  workspaceId: null as string | null,
-  workspacePath: null as string | null,
+type WorkspaceState = {
+  openFiles: OpenFile[];
+  currentFile: OpenFile | null;
+  rootHandle: FileSystemDirectoryHandle | null;
+  workspaceId: string;
+  workspacePath: string;
+  sidebarPanelVisible: boolean;
+  shellVisible: boolean;
+};
+
+const state = reactive<WorkspaceState>({
+  openFiles: [],
+  currentFile: null,
+  rootHandle: null,
+  workspaceId: '',
+  workspacePath: '',
+  sidebarPanelVisible: true,
+  shellVisible: true,
 });
 
 function upsertAndFocus(file: OpenFile) {
@@ -61,6 +73,16 @@ function setActiveFile(path: string) {
 
 function setRootHandle(handle: FileSystemDirectoryHandle | null) {
   state.rootHandle = handle;
+}
+
+function setSidebarPanelVisible(visible: boolean) {
+  state.sidebarPanelVisible = visible;
+  schedulePersist();
+}
+
+function setShellVisible(visible: boolean) {
+  state.shellVisible = visible;
+  schedulePersist();
 }
 
 function updateCurrentContent(content: string) {
@@ -105,10 +127,14 @@ function setImageViewState(path: string, imageState: ImageViewState) {
   schedulePersist();
 }
 
-function setEditorViewState(path: string, viewState: EditorViewState | null | undefined) {
+function setEditorViewState(path: string, viewState?: EditorViewState) {
   const target = state.openFiles.find((f) => f.path === path);
   if (!target) return;
-  target.viewState = viewState ?? undefined;
+  if (viewState) {
+    target.viewState = viewState;
+  } else {
+    delete target.viewState;
+  }
   schedulePersist();
 }
 
@@ -121,7 +147,7 @@ async function serializeOpenFile(
   file: OpenFile,
 ): Promise<PersistedOpenFile> {
   const rawContent = file.content ?? '';
-  const rawSaved = file.savedContent ?? undefined;
+  const rawSaved = file.savedContent;
 
   const contentKey = buildContentKey(workspaceId, file.path, 'content');
   const savedContentKey = buildContentKey(workspaceId, file.path, 'saved');
@@ -142,11 +168,11 @@ async function serializeOpenFile(
     path: file.path,
     name: file.name,
     contentKey,
-    savedContentKey: rawSaved ? savedContentKey : undefined,
-    mime: file.mime,
-    isImage: file.isImage,
-    imageState: file.imageState,
-    viewState: file.viewState,
+    ...(rawSaved ? { savedContentKey } : {}),
+    ...(file.mime ? { mime: file.mime } : {}),
+    ...(typeof file.isImage === 'boolean' ? { isImage: file.isImage } : {}),
+    ...(file.imageState ? { imageState: file.imageState } : {}),
+    ...(file.viewState ? { viewState: file.viewState } : {}),
   };
 }
 
@@ -162,6 +188,8 @@ async function serializeState(): Promise<PersistedWorkspaceState> {
   return {
     openFiles: serializedFiles,
     currentFilePath: state.currentFile?.path ?? null,
+    sidebarPanelVisible: state.sidebarPanelVisible,
+    shellVisible: state.shellVisible,
   };
 }
 
@@ -254,12 +282,12 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<OpenFile> {
     path: file.path,
     name: file.name,
     content,
-    savedContent,
-    mime: file.mime,
-    isImage: file.isImage,
     handle: null,
-    imageState: file.imageState,
-    viewState: file.viewState,
+    ...(savedContent !== undefined ? { savedContent } : {}),
+    ...(file.mime ? { mime: file.mime } : {}),
+    ...(typeof file.isImage === 'boolean' ? { isImage: file.isImage } : {}),
+    ...(file.imageState ? { imageState: file.imageState } : {}),
+    ...(file.viewState ? { viewState: file.viewState } : {}),
   };
 
   const platform = Fs.getPlatform();
@@ -272,16 +300,18 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<OpenFile> {
         const mime = blob.type || file.mime;
         const isImage = !!mime && mime.startsWith('image/');
         const content = isImage ? '' : await blob.text();
+        const nextSavedContent = file.savedContent ?? (isImage ? file.savedContent : content);
+        const mediaUrl = isImage ? URL.createObjectURL(blob) : undefined;
         return {
           ...base,
           content,
-          savedContent: file.savedContent ?? (isImage ? file.savedContent : content),
-          mime,
+          ...(nextSavedContent !== undefined ? { savedContent: nextSavedContent } : {}),
+          ...(mime ? { mime } : {}),
           handle: fh,
-          isImage,
-          mediaUrl: isImage ? URL.createObjectURL(blob) : undefined,
-          imageState: file.imageState,
-          viewState: file.viewState,
+          ...(typeof isImage === 'boolean' ? { isImage } : {}),
+          ...(mediaUrl ? { mediaUrl } : {}),
+          ...(file.imageState ? { imageState: file.imageState } : {}),
+          ...(file.viewState ? { viewState: file.viewState } : {}),
         };
       } catch {
         // 回落到本地存储内容
@@ -290,12 +320,13 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<OpenFile> {
   } else if (platform === 'node') {
     try {
       const content = await Fs.readText({ kind: 'file', name: file.name, path: file.path });
+      const nextSavedContent = file.savedContent ?? content;
       return {
         ...base,
         content,
-        savedContent: file.savedContent ?? content,
-        imageState: file.imageState,
-        viewState: file.viewState,
+        ...(nextSavedContent !== undefined ? { savedContent: nextSavedContent } : {}),
+        ...(file.imageState ? { imageState: file.imageState } : {}),
+        ...(file.viewState ? { viewState: file.viewState } : {}),
       };
     } catch {
       // ignore, fallback
@@ -319,12 +350,18 @@ async function restoreWorkspaceState() {
       ? hydrated.find((f) => f.path === persisted.currentFilePath) ?? null
       : null;
     state.currentFile = nextCurrent ?? hydrated[0] ?? null;
+    if (typeof persisted.sidebarPanelVisible === 'boolean') {
+      state.sidebarPanelVisible = persisted.sidebarPanelVisible;
+    }
+    if (typeof persisted.shellVisible === 'boolean') {
+      state.shellVisible = persisted.shellVisible;
+    }
   } catch (error) {
     console.warn('恢复工作区状态失败', error);
   }
 }
 
-async function switchWorkspace(workspaceId: string | null, workspacePath?: string | null) {
+async function switchWorkspace(workspaceId: string, workspacePath?: string) {
   if (persistTimer) {
     clearTimeout(persistTimer);
     persistTimer = null;
@@ -332,11 +369,15 @@ async function switchWorkspace(workspaceId: string | null, workspacePath?: strin
   if (state.workspaceId) {
     await persistState();
   }
-  state.workspaceId = workspaceId;
-  state.workspacePath = workspacePath ?? workspaceId;
+  const nextWorkspaceId = workspaceId || '';
+  const nextWorkspacePath = workspacePath ?? nextWorkspaceId;
+  state.workspaceId = nextWorkspaceId;
+  state.workspacePath = nextWorkspacePath;
   state.openFiles.splice(0, state.openFiles.length);
   state.currentFile = null;
-  if (!workspaceId) return;
+  state.sidebarPanelVisible = true;
+  state.shellVisible = true;
+  if (!nextWorkspaceId) return;
   await restoreWorkspaceState();
 }
 
@@ -346,6 +387,8 @@ export function useWorkspaceStore() {
     upsertAndFocus,
     setActiveFile,
     setRootHandle,
+    setSidebarPanelVisible,
+    setShellVisible,
     updateCurrentContent,
     markCurrentFileSaved,
     closeFile,

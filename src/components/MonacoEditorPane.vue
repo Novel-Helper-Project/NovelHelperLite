@@ -14,7 +14,9 @@
               {{ entry.file.name }}
               <span v-if="isFileDirty(entry.file)" class="tab-dirty" aria-hidden="true"></span>
             </span>
-            <button class="tab-close" type="button" @click.stop="closeTab(entry.file.path)">×</button>
+            <button class="tab-close" type="button" @click.stop="closeTab(entry.file.path)">
+              ×
+            </button>
           </div>
         </template>
         <div class="tab-spacer" :style="{ width: `${tabLayout.after}px` }" />
@@ -60,7 +62,27 @@
         无法加载图片资源，请检查文件路径或权限
       </div>
 
-      <div v-show="showMonaco" ref="editorEl" class="monaco-host"></div>
+      <div
+        v-show="showMonaco"
+        ref="monacoWrapperRef"
+        class="monaco-wrapper"
+        style="position: relative; flex: 1; min-height: 0; overflow: hidden"
+      >
+        <div ref="editorEl" class="monaco-host"></div>
+
+        <div
+          v-show="selectionHandles.visible"
+          class="selection-handle start-handle"
+          :style="selectionHandles.startStyle"
+          @touchstart.stop.prevent="onHandleTouchStart($event, 'start')"
+        ></div>
+        <div
+          v-show="selectionHandles.visible"
+          class="selection-handle end-handle"
+          :style="selectionHandles.endStyle"
+          @touchstart.stop.prevent="onHandleTouchStart($event, 'end')"
+        ></div>
+      </div>
     </div>
   </div>
 </template>
@@ -76,6 +98,8 @@ import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import { useWorkspaceStore } from 'src/stores/workspace';
 import type { OpenFile } from 'src/stores/workspace';
+import type { EditorViewState } from 'src/types/editorState';
+import { isMobileDevice } from 'src/utils/device';
 import InlineImageViewer from './InlineImageViewer.vue';
 
 const g = self as typeof self & {
@@ -104,6 +128,7 @@ const {
   setEditorViewState,
 } = useWorkspaceStore();
 const editorEl = ref<HTMLDivElement | null>(null);
+const monacoWrapperRef = ref<HTMLDivElement | null>(null);
 const tabbarRef = ref<HTMLDivElement | null>(null);
 const tabTrackRef = ref<HTMLDivElement | null>(null);
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
@@ -122,6 +147,17 @@ const tabSizes = new Map<string, number>();
 const tabSizesVersion = ref(0);
 const TAB_GAP = 4;
 const TAB_OVERSCAN = 120;
+
+// 选择手柄状态管理
+const selectionHandles = reactive({
+  visible: false,
+  startStyle: { top: '0px', left: '0px', height: '0px', display: 'none' },
+  endStyle: { top: '0px', left: '0px', height: '0px', display: 'none' },
+});
+
+// 拖动状态
+let isDraggingHandle = false;
+let activeHandleType: 'start' | 'end' | null = null;
 
 const tabLayout = computed(() => {
   // depend on sizes version
@@ -189,9 +225,11 @@ onMounted(() => {
   void ensureEditor();
 
   const el = editorEl.value;
-  if (el && 'ResizeObserver' in window) {
+  const wrapperEl = monacoWrapperRef.value;
+  if ((el || wrapperEl) && 'ResizeObserver' in window) {
     resizeObserver = new ResizeObserver(() => layoutEditor());
-    resizeObserver.observe(el);
+    if (el) resizeObserver.observe(el);
+    if (wrapperEl) resizeObserver.observe(wrapperEl);
   }
   window.addEventListener('resize', layoutEditor);
   revealListener = (event: Event) => handleRevealEvent(event);
@@ -214,7 +252,7 @@ onMounted(() => {
       if (prev?.path && editor) {
         const savedState = editor.saveViewState();
         viewStates.set(prev.path, savedState);
-        setEditorViewState(prev.path, savedState ?? undefined);
+        setEditorViewState(prev.path, (savedState as unknown as EditorViewState) ?? undefined);
       }
 
       if (!file) {
@@ -241,9 +279,14 @@ onMounted(() => {
         }
       }
       instance.setModel(model);
+      instance.updateOptions({
+        wordWrap: shouldEnableWordWrap(language) ? 'on' : 'off',
+      });
 
       // 恢复该文件的视图状态
-      const viewState = viewStates.get(file.path) ?? (file.viewState as monaco.editor.ICodeEditorViewState | null | undefined);
+      const viewState =
+        viewStates.get(file.path) ??
+        (file.viewState as monaco.editor.ICodeEditorViewState | null | undefined);
       if (viewState) {
         viewStates.set(file.path, viewState);
         instance.restoreViewState(viewState);
@@ -316,6 +359,10 @@ onBeforeUnmount(() => {
     tabResizeObserver = null;
   }
   window.removeEventListener('resize', layoutEditor);
+
+  // 清理选择手柄的全局事件监听器
+  window.removeEventListener('touchmove', onGlobalTouchMove);
+  window.removeEventListener('touchend', onGlobalTouchEnd);
 });
 
 type RevealDetail = { path: string; line: number; column?: number };
@@ -407,6 +454,183 @@ function getTabPosition(path: string): { start: number; end: number } | null {
   return null;
 }
 
+// --- 选择手柄功能函数 ---
+
+// 更新手柄位置的核心函数
+function updateSelectionHandles() {
+  // 仅在移动端显示拖动手柄，桌面端直接返回
+  // console.log('更新选区手柄位置');
+
+  // // 详细调试移动端判断
+  // if (typeof navigator !== 'undefined') {
+  //   const ua = navigator.userAgent || '';
+  //   const hasTouch =
+  //     typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  //   const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+
+  //   // console.log('移动端检测详情:', {
+  //   //   userAgent: ua,
+  //   //   hasTouchSupport: hasTouch,
+  //   //   hasWindowTouch: typeof window !== 'undefined' && 'ontouchstart' in window,
+  //   //   maxTouchPoints: navigator.maxTouchPoints,
+  //   //   isMobileUserAgent: isMobileUA,
+  //   //   finalIsMobile: isMobileDevice()
+  //   // });
+  // }
+
+  if (!isMobileDevice()) {
+    // console.log('桌面端不显示选区handle');
+    selectionHandles.visible = false;
+    return;
+  }
+
+  if (!editor) return;
+
+  const selection = editor.getSelection();
+  // 如果没有选区或者选区是空的（光标折叠），隐藏手柄
+  if (!selection || selection.isEmpty()) {
+    selectionHandles.visible = false;
+    return;
+  }
+
+  // 获取选区开始和结束的位置
+  const startPos = selection.getStartPosition();
+  const endPos = selection.getEndPosition();
+
+  // 获取这些位置相对于编辑器的坐标 (top, left)
+  const startScrolled = editor.getScrolledVisiblePosition(startPos);
+  const endScrolled = editor.getScrolledVisiblePosition(endPos);
+
+  if (!startScrolled || !endScrolled) {
+    selectionHandles.visible = false;
+    return;
+  }
+
+  // 获取行高，用于设置手柄的高度
+  const lineHeight = editor.getOption(monaco.editor.EditorOption.lineHeight);
+
+  selectionHandles.visible = true;
+
+  // 更新样式
+  selectionHandles.startStyle = {
+    top: `${startScrolled.top}px`,
+    left: `${startScrolled.left}px`,
+    height: `${startScrolled.height || lineHeight}px`,
+    display: 'block',
+  };
+
+  selectionHandles.endStyle = {
+    top: `${endScrolled.top}px`,
+    left: `${endScrolled.left}px`,
+    height: `${endScrolled.height || lineHeight}px`,
+    display: 'block',
+  };
+}
+
+// 处理手柄触摸开始
+function onHandleTouchStart(e: TouchEvent, type: 'start' | 'end') {
+  if (!editor) return;
+  isDraggingHandle = true;
+  activeHandleType = type;
+
+  // 添加全局移动和结束监听
+  window.addEventListener('touchmove', onGlobalTouchMove, { passive: false });
+  window.addEventListener('touchend', onGlobalTouchEnd);
+}
+
+// 处理手柄拖动
+function onGlobalTouchMove(e: TouchEvent) {
+  if (!isDraggingHandle || !editor || !activeHandleType) return;
+
+  // 阻止默认滚动行为，保证拖动流畅
+  e.preventDefault();
+
+  if (!e.touches || e.touches.length === 0) return;
+  const touch = e.touches[0];
+  if (!touch) return;
+  const clientX = touch.clientX;
+  const clientY = touch.clientY;
+
+  // 使用 Monaco API 将屏幕坐标转换为编辑器中的文本位置
+  const target = editor.getTargetAtClientPoint(clientX, clientY);
+
+  if (target && target.position) {
+    const currentSelection = editor.getSelection();
+    if (!currentSelection) return;
+
+    const newPosition = target.position;
+
+    let newSelection: monaco.Selection;
+
+    if (activeHandleType === 'start') {
+      // 拖动开始手柄：保持结束点不变，更新开始点
+      const fixedEndLine = currentSelection.endLineNumber;
+      const fixedEndCol = currentSelection.endColumn;
+
+      // 处理反向拖动（Start 拖到了 End 后面）
+      if (
+        newPosition.lineNumber > fixedEndLine ||
+        (newPosition.lineNumber === fixedEndLine && newPosition.column >= fixedEndCol)
+      ) {
+        newSelection = new monaco.Selection(
+          fixedEndLine,
+          fixedEndCol,
+          newPosition.lineNumber,
+          newPosition.column,
+        );
+        activeHandleType = 'end';
+      } else {
+        newSelection = new monaco.Selection(
+          newPosition.lineNumber,
+          newPosition.column,
+          fixedEndLine,
+          fixedEndCol,
+        );
+      }
+    } else {
+      // 拖动结束手柄
+      const fixedStartLine = currentSelection.startLineNumber;
+      const fixedStartCol = currentSelection.startColumn;
+
+      if (
+        newPosition.lineNumber < fixedStartLine ||
+        (newPosition.lineNumber === fixedStartLine && newPosition.column <= fixedStartCol)
+      ) {
+        // End 拖到了 Start 前面，交换身份
+        newSelection = new monaco.Selection(
+          newPosition.lineNumber,
+          newPosition.column,
+          fixedStartLine,
+          fixedStartCol,
+        );
+        activeHandleType = 'start';
+      } else {
+        newSelection = new monaco.Selection(
+          fixedStartLine,
+          fixedStartCol,
+          newPosition.lineNumber,
+          newPosition.column,
+        );
+      }
+    }
+
+    editor.setSelection(newSelection);
+    // 显式调用更新手柄
+    updateSelectionHandles();
+
+    // 自动滚动
+    editor.revealPosition(newPosition);
+  }
+}
+
+// 处理拖动结束
+function onGlobalTouchEnd() {
+  isDraggingHandle = false;
+  activeHandleType = null;
+  window.removeEventListener('touchmove', onGlobalTouchMove);
+  window.removeEventListener('touchend', onGlobalTouchEnd);
+}
+
 function guessLanguage(filename: string) {
   const ext = filename.split('.').pop()?.toLowerCase();
   switch (ext) {
@@ -439,6 +663,10 @@ function guessLanguage(filename: string) {
     default:
       return 'plaintext';
   }
+}
+
+function shouldEnableWordWrap(language: string) {
+  return language === 'markdown' || language === 'plaintext';
 }
 
 async function saveCurrentFile() {
@@ -489,19 +717,49 @@ function isFileDirty(file: OpenFile) {
 function ensureEditorSync() {
   if (editor) return editor;
   if (!editorEl.value) return null;
+  const initialSize = getEditorSize();
   editor = monaco.editor.create(editorEl.value, {
     value: '选择左侧文件后在此编辑',
     language: 'plaintext',
     theme: 'vs-dark',
-    automaticLayout: true,
+    automaticLayout: false,
+    ...(initialSize ? { dimension: initialSize } : {}),
   });
 
   disposables.push(
     editor.onDidChangeModelContent(() => {
       const content = editor?.getValue() ?? '';
       updateCurrentContent(content);
+      // 内容变化时更新手柄位置
+      void nextTick(() => updateSelectionHandles());
     }),
   );
+
+  // 注册选择手柄相关事件监听器
+
+  // 1. 选区改变时更新手柄
+  disposables.push(
+    editor.onDidChangeCursorSelection(() => {
+      if (!isDraggingHandle) {
+        updateSelectionHandles();
+      }
+    }),
+  );
+
+  // 2. 滚动时更新手柄位置 (非常重要，否则手柄会浮在文字上方不动)
+  disposables.push(
+    editor.onDidScrollChange(() => {
+      updateSelectionHandles();
+    }),
+  );
+
+  // 3. 布局变化时更新手柄
+  disposables.push(
+    editor.onDidLayoutChange(() => {
+      updateSelectionHandles();
+    }),
+  );
+
   layoutEditor();
   return editor;
 }
@@ -516,23 +774,33 @@ function layoutEditor() {
     cancelAnimationFrame(layoutRaf);
     layoutRaf = null;
   }
-  if (editor && editorEl.value) {
-    const host = editorEl.value;
-    layoutRaf = requestAnimationFrame(() => {
-      editor?.layout({
-        width: host.clientWidth,
-        height: host.clientHeight,
-      });
-      layoutRaf = null;
-    });
-  }
+  const size = getEditorSize();
+  if (!editor || !size) return;
+  layoutRaf = requestAnimationFrame(() => {
+    const nextSize = getEditorSize();
+    if (nextSize) editor?.layout(nextSize);
+    layoutRaf = null;
+  });
+}
+
+function getEditorSize(): { width: number; height: number } | null {
+  const target = monacoWrapperRef.value ?? editorEl.value;
+  if (!target) return null;
+  const rect = target.getBoundingClientRect();
+  const width = Math.max(0, Math.floor(rect.width));
+  const height = Math.max(0, Math.floor(rect.height));
+  if (!width || !height) return null;
+  return { width, height };
 }
 
 function disposeEditor() {
   if (editor && editor.getModel() && workspace.currentFile?.path) {
     const savedState = editor.saveViewState();
     viewStates.set(workspace.currentFile.path, savedState);
-    setEditorViewState(workspace.currentFile.path, savedState ?? undefined);
+    setEditorViewState(
+      workspace.currentFile.path,
+      (savedState as unknown as EditorViewState) ?? undefined,
+    );
   }
   editor?.dispose();
   disposables.forEach((d) => d.dispose());
@@ -547,6 +815,7 @@ function disposeEditor() {
   min-height: 400px;
   flex: 1;
   min-width: 0;
+  width: 100%;
 }
 
 .tabbar {
@@ -636,12 +905,20 @@ function disposeEditor() {
   flex: 1 1 auto;
   min-height: 300px;
   min-width: 0;
-  width: auto;
+  width: 100%;
   height: 100%;
 }
 
+.monaco-wrapper {
+  width: 100%;
+  min-width: 0;
+}
+
 .editor-body {
-  flex: 1;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -693,5 +970,60 @@ function disposeEditor() {
   color: var(--vscode-muted);
   background: #0f1216;
   font-size: 13px;
+}
+
+/* 选择手柄样式 */
+.selection-handle {
+  position: absolute;
+  width: 4px; /* 增大手柄宽度，更容易触摸 */
+  background-color: #007acc; /* VSCode 默认选中色 */
+  pointer-events: auto;
+  z-index: 100;
+  touch-action: none; /* 防止拖动时触发滚动 */
+  border-radius: 2px; /* 稍微圆角 */
+}
+
+/* 透明扩展区域 - 增大可点击区域 */
+.selection-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px; /* 24x24px 的触摸区域 */
+  height: 24px;
+  /* 透明但可点击 */
+  background-color: transparent;
+  border-radius: 50%;
+  /* 确保在主手柄下面 */
+  z-index: -1;
+}
+
+/* 圆点头部 - 使用伪元素 */
+.selection-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px; /* 调整圆点位置 */
+  transform: translateX(-50%); /* 居中 */
+  width: 8px; /* 圆点尺寸 */
+  height: 8px;
+  border-radius: 50%; /* 完全的圆形 */
+  background-color: #007acc;
+}
+
+/* 圆点中心隐藏的点击扩大区域 */
+.selection-handle::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px; /* 与圆点对齐 */
+  transform: translateX(-50%);
+  width: 16px; /* 扩大点击区域 */
+  height: 16px;
+  border-radius: 50%; /* 圆形 */
+  background-color: transparent; /* 透明 */
+  pointer-events: auto; /* 确保可点击 */
+  z-index: 10; /* 在圆点上方 */
 }
 </style>

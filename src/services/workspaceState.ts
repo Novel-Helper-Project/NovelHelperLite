@@ -4,19 +4,21 @@ import type { ImageViewState, EditorViewState } from 'src/types/editorState';
 export interface PersistedOpenFile {
   path: string;
   name: string;
-  content?: string | undefined;
-  contentKey?: string | undefined;
-  savedContent?: string | undefined;
-  savedContentKey?: string | undefined;
-  mime?: string | undefined;
-  isImage?: boolean | undefined;
-  imageState?: ImageViewState | undefined;
-  viewState?: EditorViewState | undefined;
+  content?: string;
+  contentKey?: string;
+  savedContent?: string;
+  savedContentKey?: string;
+  mime?: string;
+  isImage?: boolean;
+  imageState?: ImageViewState;
+  viewState?: EditorViewState;
 }
 
 export interface PersistedWorkspaceState {
   openFiles: PersistedOpenFile[];
-  currentFilePath: string | null;
+  currentFilePath?: string | null;
+  sidebarPanelVisible?: boolean;
+  shellVisible?: boolean;
 }
 
 const WORKSPACE_STATE_PREFIX = 'workspace.state:';

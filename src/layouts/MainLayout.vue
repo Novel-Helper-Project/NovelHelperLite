@@ -30,12 +30,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed } from 'vue';
 import { useQuasar } from 'quasar';
 import VscodeSidebar from 'components/VscodeSidebar.vue';
+import { useWorkspaceStore } from 'src/stores/workspace';
 
 const $q = useQuasar();
-const sidebarVisible = ref<boolean>(true);
+const workspaceStore = useWorkspaceStore();
+
+const sidebarVisible = computed<boolean>({
+  get: () => workspaceStore.state.shellVisible,
+  set: (value: boolean) => workspaceStore.setShellVisible(value),
+});
 
 function toggleSidebar() {
   sidebarVisible.value = !sidebarVisible.value;

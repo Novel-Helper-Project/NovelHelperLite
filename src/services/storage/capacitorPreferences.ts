@@ -17,7 +17,7 @@ export class CapacitorPreferencesAdapter implements StorageInterface {
     await Preferences.set({ key: this.getKey(key), value: serialized });
   }
 
-  async get<T>(key: string): Promise<T | null> {
+  async get<T = unknown>(key: string): Promise<T | null> {
     const { Preferences } = await import('@capacitor/preferences');
     const { value } = await Preferences.get({ key: this.getKey(key) });
     if (value == null) return null;

@@ -84,18 +84,22 @@ const tabs: SidebarTab[] = [
 
 const activeTab = ref<SidebarTab['key']>('explorer');
 const isResizing = ref(false);
-const sidebarPanelVisible = ref<boolean>(true);
 
 const DEFAULT_SIDEBAR_WIDTH = 240;
 const MIN_SIDEBAR_WIDTH = 180;
 const MAX_SIDEBAR_WIDTH = 520;
 const ACTIVITY_BAR_WIDTH = 56;
 const SIDEBAR_WIDTH_KEY = 'sidebarWidth';
-const SIDEBAR_PANEL_VISIBLE_KEY = 'sidebarPanelVisible';
 
 const sidebarWidth = ref<number>(DEFAULT_SIDEBAR_WIDTH);
 let dragStartX = 0;
 let dragStartWidth = DEFAULT_SIDEBAR_WIDTH;
+
+const workspaceStore = useWorkspaceStore();
+const sidebarPanelVisible = computed<boolean>({
+  get: () => workspaceStore.state.sidebarPanelVisible,
+  set: (value) => workspaceStore.setSidebarPanelVisible(value),
+});
 
 const activeTabLabel = computed(
   () => tabs.find((tab) => tab.key === activeTab.value)?.label ?? '侧栏',
@@ -115,17 +119,18 @@ const clampWidth = (value: number) =>
 
 async function loadSidebarWidth() {
   try {
-    const [width, panelVisible] = await Promise.all([
+    const [width, legacyVisible] = await Promise.all([
       storage.get<number>(SIDEBAR_WIDTH_KEY),
-      storage.get<boolean>(SIDEBAR_PANEL_VISIBLE_KEY),
+      storage.get<boolean>('sidebarPanelVisible'),
     ]);
 
     if (typeof width === 'number' && !Number.isNaN(width)) {
       sidebarWidth.value = clampWidth(width);
     }
 
-    if (typeof panelVisible === 'boolean') {
-      sidebarPanelVisible.value = panelVisible;
+    // 兼容旧版：如果工作区状态没有记录可见性且本地有旧存储，则应用一次
+    if (typeof legacyVisible === 'boolean' && workspaceStore.state.sidebarPanelVisible === true) {
+      workspaceStore.setSidebarPanelVisible(legacyVisible);
     }
   } catch (error) {
     console.warn('读取侧栏设置失败，将使用默认值', error);
@@ -134,10 +139,7 @@ async function loadSidebarWidth() {
 
 async function persistSidebarWidth(width: number) {
   try {
-    await Promise.all([
-      storage.set(SIDEBAR_WIDTH_KEY, clampWidth(width)),
-      storage.set(SIDEBAR_PANEL_VISIBLE_KEY, sidebarPanelVisible.value),
-    ]);
+    await storage.set(SIDEBAR_WIDTH_KEY, clampWidth(width));
   } catch (error) {
     console.warn('保存侧栏设置失败', error);
   }
@@ -204,13 +206,13 @@ function handleKeyDown(event: KeyboardEvent) {
   }
 }
 
-const { upsertAndFocus } = useWorkspaceStore();
+const { upsertAndFocus } = workspaceStore;
 const settingsStore = useSettingsStore();
 
 // 持久化面板可见性状态
 async function persistSidebarPanelVisibility() {
   try {
-    await storage.set(SIDEBAR_PANEL_VISIBLE_KEY, sidebarPanelVisible.value);
+    await storage.set('sidebarPanelVisible', sidebarPanelVisible.value);
   } catch (error) {
     console.warn('保存面板可见性设置失败', error);
   }

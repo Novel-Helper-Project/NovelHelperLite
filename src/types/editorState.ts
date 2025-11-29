@@ -1,5 +1,3 @@
-import type * as monaco from 'monaco-editor';
-
 export type ImageViewState = {
   scale: number;
   rotation: number;
@@ -9,5 +7,5 @@ export type ImageViewState = {
   flipY: boolean;
 };
 
-// Monaco 视图状态或其它序列化数据
-export type EditorViewState = monaco.editor.ICodeEditorViewState | Record<string, unknown>;
+// Monaco 视图状态（使用宽松结构存储以兼容不同平台）
+export type EditorViewState = Record<string, unknown>;

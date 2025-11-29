@@ -6,6 +6,7 @@
       "name": "anh-lite",
       "dependencies": {
         "@capacitor/filesystem": "^7.1.5",
+        "@capacitor/preferences": "^7.0.2",
         "@capawesome/capacitor-file-picker": "^7.2.0",
         "@quasar/extras": "^1.16.4",
         "monaco-editor": "^0.55.1",
@@ -52,6 +53,8 @@
     "@capacitor/core": ["@capacitor/core@7.4.4", "", { "dependencies": { "tslib": "^2.1.0" } }, "sha512-xzjxpr+d2zwTpCaN0k+C6wKSZzWFAb9OVEUtmO72ihjr/NEDoLvsGl4WLfjWPcCO2zOy0b2X52tfRWjECFUjtw=="],
 
     "@capacitor/filesystem": ["@capacitor/filesystem@7.1.5", "", { "dependencies": { "@capacitor/synapse": "^1.0.3" }, "peerDependencies": { "@capacitor/core": ">=7.0.0" } }, "sha512-ZzJxpEh6SwKhF1cqSVmIAkEyNG3ozf3Lwg8rUNltX6CGdd94UJV45asqmFoP6X6aT5eVu7FPjPU5SHxi6XOFgA=="],
+
+    "@capacitor/preferences": ["@capacitor/preferences@7.0.2", "", { "peerDependencies": { "@capacitor/core": ">=7.0.0" } }, "sha512-JVCy0/oc6RsRencLOZ8rMqjNxAlHs7awPJU/MXqangsJ48oO2PnYGHfCvci6WgIJlqyC0QhvWZaO1BR1lVkHWQ=="],
 
     "@capacitor/synapse": ["@capacitor/synapse@1.0.4", "", {}, "sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw=="],
 

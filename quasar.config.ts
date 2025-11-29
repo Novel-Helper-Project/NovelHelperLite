@@ -66,6 +66,19 @@ export default defineConfig((/* ctx */) => {
       // distDir
 
       // extendViteConf (viteConf) {},
+      // extendViteConf(viteConf) {
+      //   viteConf.server ??= {};
+
+      //   // 让 Vite 接受 Host: andrea0m16.lan
+      //   (viteConf.server).allowedHosts = ['andrea0m16.lan'];
+
+      //   // HMR 也从这个域名/端口走（浏览器直接连 dev server）
+      //   (viteConf.server).hmr = {
+      //     host: 'andrea0m16.lan',
+      //     protocol: 'wss',
+      //     port: 9000,
+      //   };
+      // },
       // viteVuePluginOptions: {},
 
       vitePlugins: [
@@ -83,10 +96,15 @@ export default defineConfig((/* ctx */) => {
       ],
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
+    // // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
+    // devServer: {
+    //   // https: true,
+    //   open: true, // opens browser window automatically
+    // },
     devServer: {
-      // https: true,
-      open: true, // opens browser window automatically
+      https: false,
+      host: '0.0.0.0', // 或 0.0.0.0
+      port: 9000,
     },
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework

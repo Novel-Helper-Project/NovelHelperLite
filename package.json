@@ -1,9 +1,21 @@
 {
   "name": "anh-lite",
   "version": "0.0.1",
-  "description": "ANH Lite",
+  "description": "ANH Lite(Lite Editor for Novel Helper) is a lightweight version of Novel Helper, designed for quick and efficient text editing and note-taking.",
   "productName": "ANH Lite",
-  "author": "AuraElicase <auraelicase@outlook.com>",
+  "author": "The NovelHelperLite Team <andreafrederica@outlook.com>",
+  "contributors": [
+    {
+      "name": "AuraElicase",
+      "email": "auraelicase@outlook.com",
+      "role": "co-author"
+    },
+    {
+      "name": "AndreaFrederica",
+      "email": "andreafrederica@outlook.com",
+      "role": "co-author"
+    }
+  ],
   "type": "module",
   "private": true,
   "scripts": {
