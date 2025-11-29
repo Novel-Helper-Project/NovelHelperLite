@@ -5,8 +5,9 @@
         文件资源管理器
         <span
           v-if="!fileSystemSupport.supported"
-          class="compatibility-indicator"
+          class="compatibility-indicator clickable"
           :title="fileSystemSupport.reason"
+          @click="showFileAccessError"
         >
           ⚠️
         </span>
@@ -133,6 +134,18 @@
 
 <script setup lang="ts">
 import { computed, h, reactive, ref, onMounted } from 'vue';
+
+// 添加 Capacitor 全局类型声明
+declare global {
+  interface Window {
+    Capacitor?: {
+      getPlatform(): string;
+      isNative?: boolean;
+      isPluginAvailable?(pluginName: string): boolean;
+      [key: string]: unknown;
+    };
+  }
+}
 import { NDropdown, NScrollbar, NTree } from 'naive-ui';
 import type { TreeDropInfo, TreeOption } from 'naive-ui';
 import { useWorkspaceStore, type OpenFile } from 'src/stores/workspace';
@@ -568,19 +581,18 @@ async function pickWorkspace() {
   const platform = Fs.getPlatform();
   if (platform === 'capacitor') {
     try {
+      // 确保已获得必要权限
+      console.log('开始确保权限...');
       await Fs.ensureMobilePermissions();
-      const { FilePicker } = await import('@capawesome/capacitor-file-picker');
-      const picked = await FilePicker.pickDirectory();
-      const dirPath = (picked as unknown as { path?: string }).path ?? '';
-      const rel = toRelativeExternal(dirPath);
-      const { Directory } = await import('@capacitor/filesystem');
-      const rootEntry: FsEntry = {
-        kind: 'directory',
-        name: basename(rel) || 'ExternalStorage',
-        path: rel,
-        capDirectory: Directory.ExternalStorage,
-      };
+
+      // 使用统一的 Fs.pickDirectory API
+      console.log('开始选择目录...');
+      const rootEntry = await Fs.pickDirectory();
+      console.log('选择目录结果:', rootEntry);
+
       const treeEntries = await Fs.buildTree(rootEntry);
+      console.log('构建文件树完成，条目数:', treeEntries.length);
+
       const rootNode: ExplorerNode = {
         key: rootEntry.path ?? rootEntry.name,
         label: rootEntry.name,
@@ -597,23 +609,46 @@ async function pickWorkspace() {
       await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
       return;
     } catch (error) {
-      console.error('系统选择目录失败，使用默认目录', error);
-      const rootEntry = await Fs.pickDirectory();
-      const treeEntries = await Fs.buildTree(rootEntry);
-      const rootNode: ExplorerNode = {
-        key: rootEntry.path ?? rootEntry.name,
-        label: rootEntry.name,
-        type: 'folder',
-        path: rootEntry.path ?? rootEntry.name,
-        fsEntry: rootEntry,
-        children: convertFsTreeToExplorer(treeEntries, rootEntry.path ?? rootEntry.name),
-      };
-      explorerData.value = [rootNode];
-      expandedKeys.value = [rootNode.key];
-      selectedKeys.value = [];
-      contextMenu.node = null;
-      await persistLastWorkspace(rootEntry);
-      await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
+      console.error('选择目录失败:', error);
+
+      // 处理用户取消的情况
+      if (error instanceof Error && error.message.includes('用户取消选择')) {
+        console.log('用户取消了目录选择');
+        return;
+      }
+
+      // 处理权限问题
+      if (error instanceof Error && error.message.includes('permission')) {
+        window.alert('❌ 需要文件访问权限\n\n请在应用设置中授予存储权限');
+        return;
+      }
+
+      // 显示详细的错误信息，包含调试信息
+      let debugInfo = '';
+      try {
+        const platform = Fs.getPlatform();
+        debugInfo = `\n\n📱 平台信息：${platform}`;
+        debugInfo += `\n📱 错误类型：${error instanceof Error ? error.constructor.name : 'Error'}`;
+        debugInfo += `\n📱 错误信息：${error instanceof Error ? error.message : String(error)}`;
+        debugInfo += `\n📱 错误堆栈：${error instanceof Error ? error.stack || '无堆栈信息' : '无堆栈信息'}`;
+
+        if (platform === 'capacitor') {
+          debugInfo += `\n📱 是否在 Capacitor 应用中：是`;
+          if (typeof window !== 'undefined' && window.Capacitor?.getPlatform) {
+            const capacitorPlatform = window.Capacitor.getPlatform();
+            debugInfo += `\n📱 Capacitor 平台：${capacitorPlatform}`;
+          }
+        } else {
+          debugInfo += `\n📱 是否在 Capacitor 应用中：否`;
+        }
+
+        debugInfo += `\n📱 用户代理：${navigator.userAgent || '未知'}`;
+        debugInfo += `\n\n💡 请将此错误信息截图并提供给开发者`;
+      } catch (e) {
+        debugInfo = `\n\n无法获取调试信息：${e instanceof Error ? e.message : String(e)}`;
+      }
+
+      window.alert(`❌ 选择目录失败${debugInfo}`);
       return;
     }
   }
@@ -720,28 +755,6 @@ function convertFsTreeToExplorer(
   return nodes;
 }
 
-function toRelativeExternal(abs: string): string {
-  const s = (abs || '').trim();
-  if (!s) return '';
-  if (s.startsWith('content://')) {
-    const m = s.match(/\/(?:tree|document)\/([^/?#]+)/i);
-    if (m && m[1]) {
-      let decoded = '';
-      try {
-        decoded = decodeURIComponent(m[1]);
-      } catch {
-        decoded = m[1];
-      }
-      const colonIdx = decoded.indexOf(':');
-      const rel = colonIdx >= 0 ? decoded.slice(colonIdx + 1) : decoded;
-      return rel.replace(/^\/+|\/+$/g, '');
-    }
-    return '';
-  }
-  const cleaned = s.replace(/^file:\/\//, '').replace(/^\/?storage\/emulated\/0\/?/, '');
-  return cleaned.replace(/^\/+|\/+$/g, '');
-}
-
 function basename(p: string): string {
   const s = p.replace(/\/+$/u, '');
   const colonIdx = s.indexOf(':');
@@ -768,6 +781,7 @@ async function openFile(node: ExplorerNode) {
           name: node.label,
           content: '',
           handle: (node.handle as FileSystemFileHandle) ?? null,
+          fsEntry: node.fsEntry,
           mime,
           mediaUrl,
           isImage: true,
@@ -780,6 +794,7 @@ async function openFile(node: ExplorerNode) {
         name: node.label,
         content,
         handle: (node.handle as FileSystemFileHandle) ?? null,
+        fsEntry: node.fsEntry,
         mime,
         isImage: false,
       });
@@ -800,6 +815,7 @@ async function openFile(node: ExplorerNode) {
           name: node.label,
           content: '',
           handle: null,
+          fsEntry: node.fsEntry,
           mime,
           mediaUrl,
           isImage: true,
@@ -812,6 +828,7 @@ async function openFile(node: ExplorerNode) {
         name: node.label,
         content,
         handle: null,
+        fsEntry: node.fsEntry,
         mime,
         isImage: false,
       });
@@ -828,6 +845,7 @@ async function openFile(node: ExplorerNode) {
       name: node.label,
       content,
       handle: null,
+      fsEntry: node.fsEntry,
       mime: 'text/plain',
       isImage: false,
     });
@@ -886,24 +904,55 @@ function handleMenuSelect(key: string) {
   contextMenu.show = false;
 }
 
-function showCompatibilityHelp() {
+function showFileAccessError() {
   const support = fileSystemSupport;
+  const platform = Fs.getPlatform();
+
   let message = `❌ 文件系统访问不可用\n\n`;
-  message += `🔍 当前浏览器：${support.browser || '未知'}\n`;
+  message += `🔍 当前环境：${support.browser || '未知'}\n`;
+  message += `📱 运行平台：${platform}\n`;
+
+  // 检测是否在 Capacitor 应用内
+  const isCapacitorApp =
+    platform === 'capacitor' || (typeof window !== 'undefined' && 'Capacitor' in window);
+  if (isCapacitorApp) {
+    message += `📲 Capacitor 应用：是\n`;
+    // 获取 Capacitor 平台信息
+    if (typeof window !== 'undefined' && window.Capacitor && 'getPlatform' in window.Capacitor) {
+      const capacitorPlatform = window.Capacitor.getPlatform();
+      message += `📲 Capacitor 平台：${capacitorPlatform}\n`;
+    }
+  } else {
+    message += `📲 Capacitor 应用：否\n`;
+  }
+
   message += `❓ 不支持原因：${support.reason || '未知'}\n\n`;
+
+  // 添加用户代理信息
+  const userAgent = navigator.userAgent;
+  if (userAgent) {
+    message += `🌐 用户代理：\n${userAgent}\n\n`;
+  }
+
   message += `💡 解决建议：\n${support.suggestion || '请尝试其他浏览器'}`;
 
   // 如果有调试信息，添加到控制台
   if (support.debug) {
-    console.group('🔍 浏览器兼容性调试信息');
+    console.group('🔍 文件系统访问调试信息');
     console.log('User-Agent:', support.debug.userAgent);
     console.log('检测结果详情:', support.debug.details);
+    console.log('当前平台:', platform);
+    console.log('Capacitor状态:', isCapacitorApp);
     console.groupEnd();
 
     message += '\n\n📋 详细调试信息已输出到控制台，请按 F12 查看';
   }
 
   window.alert(message);
+}
+
+function showCompatibilityHelp() {
+  showFileAccessError();
 }
 </script>
 
@@ -918,6 +967,19 @@ function showCompatibilityHelp() {
 
 .compatibility-indicator:hover {
   opacity: 1;
+}
+
+.compatibility-indicator.clickable {
+  cursor: pointer;
+}
+
+.compatibility-indicator.clickable:hover {
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.compatibility-indicator.clickable:active {
+  transform: scale(0.95);
 }
 
 /* 帮助按钮特殊样式 */

@@ -1,14 +1,15 @@
 {
   "name": "anh-lite",
   "version": "0.0.1",
-  "description": "ANH Lite",
-  "author": "AuraElicase <auraelicase@outlook.com>",
+  "description": "ANH Lite(Lite Editor for Novel Helper) is a lightweight version of Novel Helper, designed for quick and efficient text editing and note-taking.",
+  "author": "The NovelHelperLite Team <andreafrederica@outlook.com>",
   "private": true,
   "dependencies": {
     "@capacitor/android": "^7.0.0",
     "@capacitor/app": "^7.0.0",
     "@capacitor/cli": "^7.0.0",
     "@capacitor/core": "^7.0.0",
+    "@capacitor/device": "^7.0.2",
     "@capacitor/filesystem": "^7.1.5",
     "@capacitor/preferences": "^7.0.2",
     "@capawesome/capacitor-file-picker": "^7.2.0"

@@ -27,6 +27,7 @@
     "postinstall": "quasar prepare"
   },
   "dependencies": {
+    "@capacitor/android": "^7.4.4",
     "@capacitor/device": "^7.0.2",
     "@capacitor/filesystem": "^7.1.5",
     "@capacitor/preferences": "^7.0.2",
@@ -39,9 +40,11 @@
     "v-viewer": "^3.0.22",
     "viewerjs": "^1.11.7",
     "vue": "^3.5.22",
-    "vue-router": "^4.0.12"
+    "vue-router": "^4.0.12",
+    "vuefinder": "^4.0.24"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.4.4",
     "@eslint/js": "^9.14.0",
     "@quasar/app-vite": "^2.1.0",
     "@types/node": "^20.5.9",

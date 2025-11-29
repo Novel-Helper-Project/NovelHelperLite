@@ -99,6 +99,8 @@ import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import { useWorkspaceStore } from 'src/stores/workspace';
 import type { OpenFile } from 'src/stores/workspace';
 import type { EditorViewState } from 'src/types/editorState';
+import Fs from 'src/services/filesystem';
+import type { FsEntry } from 'src/services/filesystem/types';
 import { isMobileDevice } from 'src/utils/device';
 import InlineImageViewer from './InlineImageViewer.vue';
 
@@ -200,13 +202,14 @@ const tabTrackStyle = computed(() => ({
   transform: `translateX(-${tabScroll.value}px)`,
 }));
 
-const canSave = computed(
-  () =>
-    !!workspace.currentFile &&
-    !!editor &&
-    ((workspace.currentFile.handle && workspace.currentFile.handle.kind === 'file') ||
-      workspace.currentFile.onSave),
-);
+const canSave = computed(() => {
+  const current = workspace.currentFile;
+  if (!current || !editor) return false;
+  if (current.onSave) return true;
+  if (current.handle && current.handle.kind === 'file') return true;
+  if (current.fsEntry && current.fsEntry.kind === 'file') return true;
+  return false;
+});
 const showMonaco = computed(() => !!workspace.currentFile && !workspace.currentFile.isImage);
 const imageFiles = computed(() =>
   workspace.openFiles.filter((f): f is OpenFile & { isImage: true } => !!f.isImage),
@@ -489,9 +492,17 @@ function updateSelectionHandles() {
   const selection = editor.getSelection();
   // 如果没有选区或者选区是空的（光标折叠），隐藏手柄
   if (!selection || selection.isEmpty()) {
+    // if (selection.isEmpty()) {
+    //   console.log('选区为空，隐藏手柄');
+    // }
     selectionHandles.visible = false;
     return;
   }
+
+  // if (!selection) {
+  //   selectionHandles.visible = false;
+  //   return;
+  // }
 
   // 获取选区开始和结束的位置
   const startPos = selection.getStartPosition();
@@ -669,6 +680,27 @@ function shouldEnableWordWrap(language: string) {
   return language === 'markdown' || language === 'plaintext';
 }
 
+function resolveFsTarget(file: OpenFile): { dir: FsEntry; name: string } | null {
+  const entry = file.fsEntry;
+  if (!entry || entry.kind !== 'file') return null;
+
+  const normalizedPath = (entry.path ?? file.path ?? '').replace(/\\/g, '/');
+  const parts = normalizedPath.split('/').filter(Boolean);
+  const fileName = entry.name || file.name || parts.pop() || '';
+  if (!fileName) return null;
+  const dirParts = parts.slice(0, -1); // 去掉文件名，保留目录路径
+  const dirPath = dirParts.join('/');
+  const dirName = dirParts[dirParts.length - 1] || '';
+
+  const dirEntry: FsEntry = {
+    kind: 'directory',
+    name: dirName || 'root',
+    path: dirPath,
+    ...(entry.capDirectory ? { capDirectory: entry.capDirectory } : {}),
+  };
+  return { dir: dirEntry, name: fileName };
+}
+
 async function saveCurrentFile() {
   if (!workspace.currentFile || !editor) return;
 
@@ -687,17 +719,30 @@ async function saveCurrentFile() {
     }
   }
 
-  // 原有的文件系统保存逻辑
-  if (!workspace.currentFile.handle || workspace.currentFile.handle.kind !== 'file') return;
+  // 优先使用统一的 Fs 封装
+  const fsTarget = resolveFsTarget(workspace.currentFile);
+  if (fsTarget) {
+    try {
+      await Fs.writeText(fsTarget.dir, fsTarget.name, content);
+      updateCurrentContent(content);
+      markCurrentFileSaved(content);
+      return;
+    } catch (error) {
+      console.error('使用 Fs 写入失败，尝试 FileSystemHandle 备用方案:', error);
+    }
+  }
 
-  try {
-    const writable = await workspace.currentFile.handle.createWritable();
-    await writable.write(content);
-    await writable.close();
-    updateCurrentContent(content);
-    markCurrentFileSaved(content);
-  } catch (error) {
-    console.error('保存文件失败:', error);
+  // 备用：File System Access API（仅在 web/桌面有 handle 时）
+  if (workspace.currentFile.handle && workspace.currentFile.handle.kind === 'file') {
+    try {
+      const writable = await workspace.currentFile.handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      updateCurrentContent(content);
+      markCurrentFileSaved(content);
+    } catch (error) {
+      console.error('保存文件失败:', error);
+    }
   }
 }
 

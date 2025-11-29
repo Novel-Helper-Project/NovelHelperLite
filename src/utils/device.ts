@@ -1,4 +1,14 @@
+import { Capacitor } from '@capacitor/core';
+
 export function isMobileDevice() {
+  // Capacitor 原生运行环境视为移动端
+  try {
+    // console.log('检测 Capacitor 平台信息', Capacitor.isNativePlatform?.());
+    if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform?.()) return true;
+  } catch (e) {
+    console.warn('Capacitor 平台检测失败', e);
+  }
+
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
 

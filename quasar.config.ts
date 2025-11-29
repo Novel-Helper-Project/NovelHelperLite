@@ -66,19 +66,13 @@ export default defineConfig((/* ctx */) => {
       // distDir
 
       // extendViteConf (viteConf) {},
-      // extendViteConf(viteConf) {
-      //   viteConf.server ??= {};
-
-      //   // 让 Vite 接受 Host: andrea0m16.lan
-      //   (viteConf.server).allowedHosts = ['andrea0m16.lan'];
-
-      //   // HMR 也从这个域名/端口走（浏览器直接连 dev server）
-      //   (viteConf.server).hmr = {
-      //     host: 'andrea0m16.lan',
-      //     protocol: 'wss',
-      //     port: 9000,
-      //   };
-      // },
+      extendViteConf(viteConf) {
+        // ✅ 修复 Vite 7 + Capacitor 构建失败问题
+        // IIFE/UMD 格式在 code-splitting 模式下不支持，强制使用 ES 格式
+        viteConf.worker = {
+          format: 'es',
+        };
+      },
       // viteVuePluginOptions: {},
 
       vitePlugins: [

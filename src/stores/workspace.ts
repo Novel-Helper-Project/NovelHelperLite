@@ -7,6 +7,7 @@ import {
   type PersistedWorkspaceState,
 } from 'src/services/workspaceState';
 import type { EditorViewState, ImageViewState } from 'src/types/editorState';
+import type { FsEntry } from 'src/services/filesystem/types';
 import { storage } from 'src/services/storage';
 
 const MAX_PERSIST_CONTENT_LENGTH = 400_000; // ~400 KB
@@ -18,6 +19,7 @@ export type OpenFile = {
   name: string;
   content: string;
   handle?: FileSystemFileHandle | null;
+  fsEntry?: FsEntry;
   mime?: string;
   mediaUrl?: string;
   isImage?: boolean;

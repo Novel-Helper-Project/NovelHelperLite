@@ -1,0 +1,21 @@
+
+ .d88888b.
+d88P" "Y88b
+888     888
+888     888 888  888  8888b.  .d8888b   8888b.  888d888
+888     888 888  888     "88b 88K          "88b 888P"
+888 Y8b 888 888  888 .d888888 "Y8888b. .d888888 888
+Y88b.Y8b88P Y88b 888 888  888      X88 888  888 888
+ "Y888888"   "Y88888 "Y888888  88888P' "Y888888 888
+       Y8b
+
+ App • Using quasar.config.ts in "ts" format
+ App •  TIP  • 🚀  You (or an AE) specified an explicit quasar.config file > devServer > port. It is recommended to use a different devServer > port for each Quasar mode to avoid browser cache issues. Example: ctx.mode.ssr ? 9100 : ...
+[32m?[39m [1mWhat external IP should Quasar use?[22m[0m [0m[2m(Use arrow keys)[22m
+[36m❯ 198.18.0.1[39m 
+  169.254.83.107 
+  169.254.38.233 
+  169.254.117.53 
+  10.233.10.1 
+  169.254.48.225 
+  10.243.56.29 
