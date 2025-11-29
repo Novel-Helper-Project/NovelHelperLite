@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import Fs from 'src/services/fs';
+import Fs from 'src/services/filesystem';
 import {
   readWorkspaceState,
   saveWorkspaceState,

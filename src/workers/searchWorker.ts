@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { list, readText, type FsEntry } from '../services/fs';
+import Fs, { type FsEntry } from '../services/filesystem';
 
 type SearchOptions = {
   matchCase: boolean;
@@ -108,7 +108,7 @@ async function handleSearch(request: SearchRequest) {
 
       let content: string;
       try {
-        content = await readText(entry);
+        content = await Fs.readText(entry);
       } catch {
         return;
       }
@@ -175,10 +175,10 @@ async function walkDirectory(
   if (shouldStop()) return;
   if (dir.kind !== 'directory') return;
 
-  const children = await list(dir);
+  const children = await Fs.list(dir);
   for (const child of children) {
     if (shouldStop()) break;
-    const nextRelative = currentRelative ? `${currentRelative}/${child.name}` : child.name ?? '';
+    const nextRelative = currentRelative ? `${currentRelative}/${child.name}` : (child.name ?? '');
 
     const action = await onEntry(child, nextRelative);
     if (child.kind === 'directory' && action !== 'skip-children') {
@@ -187,7 +187,10 @@ async function walkDirectory(
   }
 }
 
-function buildMatcher(query: string, options: SearchOptions): { regex: RegExp | null; error?: string } {
+function buildMatcher(
+  query: string,
+  options: SearchOptions,
+): { regex: RegExp | null; error?: string } {
   const trimmed = query.trim();
   if (!trimmed) return { regex: null, error: '搜索关键词不能为空' };
 
@@ -240,7 +243,11 @@ function findMatches(text: string, regex: RegExp, perFileLimit: number): SearchM
   return matches;
 }
 
-function buildPreview(line: string, start: number, length: number): { preview: string; start: number } {
+function buildPreview(
+  line: string,
+  start: number,
+  length: number,
+): { preview: string; start: number } {
   const maxLen = 180;
   if (line.length <= maxLen) {
     return { preview: line, start };
@@ -271,7 +278,10 @@ function locateLine(offset: number, lineStarts: number[]): number {
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);
     const start = lineStarts[mid] ?? 0;
-    const next = mid + 1 < lineStarts.length ? lineStarts[mid + 1] ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER;
+    const next =
+      mid + 1 < lineStarts.length
+        ? (lineStarts[mid + 1] ?? Number.MAX_SAFE_INTEGER)
+        : Number.MAX_SAFE_INTEGER;
 
     if (offset >= start && offset < next) return mid;
     if (offset < start) {

@@ -88,7 +88,7 @@
         :max-height="MAX_OPENED_HEIGHT"
         @update:height="openedHeight = $event"
       >
-        <n-scrollbar class="tree-scroll" style="height: 100%;">
+        <n-scrollbar class="tree-scroll" style="height: 100%">
           <n-tree
             block-line
             :data="openedTreeData"
@@ -136,7 +136,7 @@ import { computed, h, reactive, ref, onMounted } from 'vue';
 import { NDropdown, NScrollbar, NTree } from 'naive-ui';
 import type { TreeDropInfo, TreeOption } from 'naive-ui';
 import { useWorkspaceStore, type OpenFile } from 'src/stores/workspace';
-import Fs, { type FsEntry, checkFileSystemSupport } from 'src/services/fs';
+import Fs, { type FsEntry, checkFileSystemSupport } from 'src/services/filesystem';
 import {
   persistLastWorkspace,
   loadLastWorkspace,
@@ -173,8 +173,14 @@ const contextMenu = reactive({
   node: null as ExplorerNode | null,
 });
 
-const { state: workspace, upsertAndFocus, setRootHandle, switchWorkspace, setActiveFile, closeFile } =
-  useWorkspaceStore();
+const {
+  state: workspace,
+  upsertAndFocus,
+  setRootHandle,
+  switchWorkspace,
+  setActiveFile,
+  closeFile,
+} = useWorkspaceStore();
 
 const contextMenuOptions = computed(() => [
   { label: '新建文件', key: 'new-file' },
@@ -298,13 +304,12 @@ async function restoreLastWorkspace() {
       };
     } else if (persisted.platform === 'capacitor') {
       const { Directory } = await import('@capacitor/filesystem');
-      const dirMap = Directory as unknown as Record<string, CapDirectory>;
-      const dir = dirMap[persisted.capDirectory ?? 'Documents'] ?? Directory.Documents;
-      const picked = await Fs.pickDirectory(dir);
+      const dir = persisted.capDirectory ?? Directory.Documents;
+      const displayName = persisted.name || basename(persisted.path || '') || String(dir);
       rootEntry = {
         kind: 'directory',
-        name: persisted.name || picked.name || dir,
-        path: picked.path ?? '',
+        name: displayName,
+        path: persisted.path ?? '',
         capDirectory: dir,
       };
     }
@@ -584,34 +589,34 @@ async function pickWorkspace() {
         fsEntry: rootEntry,
         children: convertFsTreeToExplorer(treeEntries, rootEntry.path ?? rootEntry.name),
       };
-    explorerData.value = [rootNode];
-    expandedKeys.value = [rootNode.key];
-    selectedKeys.value = [];
-    contextMenu.node = null;
-    await persistLastWorkspace(rootEntry);
-    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
-    return;
-  } catch (error) {
-    console.error('系统选择目录失败，使用默认目录', error);
-    const rootEntry = await Fs.pickDirectory();
-    const treeEntries = await Fs.buildTree(rootEntry);
-    const rootNode: ExplorerNode = {
+      explorerData.value = [rootNode];
+      expandedKeys.value = [rootNode.key];
+      selectedKeys.value = [];
+      contextMenu.node = null;
+      await persistLastWorkspace(rootEntry);
+      await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
+      return;
+    } catch (error) {
+      console.error('系统选择目录失败，使用默认目录', error);
+      const rootEntry = await Fs.pickDirectory();
+      const treeEntries = await Fs.buildTree(rootEntry);
+      const rootNode: ExplorerNode = {
         key: rootEntry.path ?? rootEntry.name,
         label: rootEntry.name,
         type: 'folder',
         path: rootEntry.path ?? rootEntry.name,
         fsEntry: rootEntry,
-      children: convertFsTreeToExplorer(treeEntries, rootEntry.path ?? rootEntry.name),
-    };
-    explorerData.value = [rootNode];
-    expandedKeys.value = [rootNode.key];
-    selectedKeys.value = [];
-    contextMenu.node = null;
-    await persistLastWorkspace(rootEntry);
-    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
-    return;
+        children: convertFsTreeToExplorer(treeEntries, rootEntry.path ?? rootEntry.name),
+      };
+      explorerData.value = [rootNode];
+      expandedKeys.value = [rootNode.key];
+      selectedKeys.value = [];
+      contextMenu.node = null;
+      await persistLastWorkspace(rootEntry);
+      await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
+      return;
+    }
   }
-}
   try {
     const rootEntry = await Fs.pickDirectory();
     if (
@@ -1032,7 +1037,9 @@ function showCompatibilityHelp() {
 :deep(.tree-scroll .n-tree-node-content) {
   padding: 4px 8px;
   border-radius: 4px;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
   color: var(--vscode-foreground, #e8ecf3);
 }
 
@@ -1076,7 +1083,9 @@ function showCompatibilityHelp() {
   font-size: 12px;
   padding: 2px 4px;
   border-radius: 4px;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .opened-close:hover {
@@ -1097,7 +1106,10 @@ function showCompatibilityHelp() {
   font-size: 11px;
   padding: 0;
   border-radius: 4px;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 :deep(.opened-close:hover) {

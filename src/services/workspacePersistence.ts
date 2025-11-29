@@ -1,6 +1,6 @@
 import type { Directory as CapDirectory } from '@capacitor/filesystem';
 import { storage } from './storage';
-import Fs, { type FsEntry, type FsPlatform } from './fs';
+import Fs, { type FsEntry, type FsPlatform } from './filesystem';
 
 const LAST_WORKSPACE_KEY = 'workspace.last';
 const HANDLE_DB_NAME = 'workspace-handle-store';

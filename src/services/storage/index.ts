@@ -1,5 +1,7 @@
 import type { StorageInterface } from './interface';
 import { LocalStorageAdapter } from './localStorage';
+import { CapacitorPreferencesAdapter } from './capacitorPreferences';
+import { getPlatform } from '../filesystem/platform';
 
 /**
  * 存储服务工厂
@@ -22,13 +24,15 @@ export class StorageService {
    * 根据用户代理和环境创建存储实例
    */
   private static createStorageInstance(): StorageInterface {
-    // Web平台检测
+    const platform = getPlatform();
+    if (platform === 'capacitor') {
+      console.log('🔧 Storage: Using Capacitor Preferences adapter');
+      return new CapacitorPreferencesAdapter();
+    }
     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
       console.log('🔧 Storage: Using LocalStorage adapter');
       return new LocalStorageAdapter();
     }
-
-    // 默认使用localStorage（适用于大多数情况）
     console.log('🔧 Storage: Using LocalStorage adapter (fallback)');
     return new LocalStorageAdapter();
   }
@@ -46,4 +50,4 @@ export const storage = StorageService.getInstance();
 
 // 导出类型和实现类，供需要时使用
 export type { StorageInterface };
-export { LocalStorageAdapter };
+export { LocalStorageAdapter, CapacitorPreferencesAdapter };

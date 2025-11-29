@@ -126,7 +126,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { NVirtualList } from 'naive-ui';
 import SearchWorker from 'src/workers/searchWorker?worker';
-import Fs, { type FsEntry } from 'src/services/fs';
+import Fs, { type FsEntry } from 'src/services/filesystem';
 import { getPersistedDirectoryHandle, loadLastWorkspace } from 'src/services/workspacePersistence';
 import { useWorkspaceStore } from 'src/stores/workspace';
 
