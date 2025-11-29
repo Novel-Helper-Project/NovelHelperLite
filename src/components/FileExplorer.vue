@@ -20,11 +20,20 @@
           v-if="isCapacitor"
           class="ghost-btn"
           type="button"
+          title="打开应用私有工作区"
+          @click="openPrivateWorkspace"
+        >
+          <span class="material-icons">inventory_2</span>
+        </button>
+        <!-- <button
+          v-if="isCapacitor"
+          class="ghost-btn"
+          type="button"
           title="选择移动端根目录"
           @click="openCapRootMenu($event)"
         >
           <span class="material-icons">drive_file_move</span>
-        </button>
+        </button> -->
         <button
           v-if="!fileSystemSupport.supported && !isCapacitor"
           class="ghost-btn help-btn"
@@ -62,18 +71,6 @@
       :show="contextMenu.show"
       @select="handleMenuSelect"
       @update:show="contextMenu.show = $event"
-    />
-
-    <n-dropdown
-      v-if="isCapacitor"
-      trigger="manual"
-      placement="bottom-start"
-      :x="capRootMenu.x"
-      :y="capRootMenu.y"
-      :options="capRootOptions"
-      :show="capRootMenu.show"
-      @select="handleCapRootSelect"
-      @update:show="capRootMenu.show = $event"
     />
 
     <div class="explorer-trees">
@@ -155,7 +152,7 @@ import {
   loadLastWorkspace,
   getPersistedDirectoryHandle,
 } from 'src/services/workspacePersistence';
-import type { Directory as CapDirectory } from '@capacitor/filesystem';
+// import type { Directory as CapDirectory } from '@capacitor/filesystem';
 import TreePanel from './TreePanel.vue';
 
 type ExplorerNode = TreeOption & {
@@ -200,15 +197,6 @@ const contextMenuOptions = computed(() => [
   { label: '新建文件夹', key: 'new-folder' },
   { label: '重命名', key: 'rename', disabled: !contextMenu.node },
   { label: '删除', key: 'delete', disabled: !contextMenu.node },
-]);
-
-const capRootMenu = reactive({ show: false, x: 0, y: 0 });
-const capRootOptions = computed(() => [
-  { label: 'Documents', key: 'Documents' },
-  { label: 'Data', key: 'Data' },
-  { label: 'Cache', key: 'Cache' },
-  { label: 'External', key: 'External' },
-  { label: 'ExternalStorage', key: 'ExternalStorage' },
 ]);
 
 const openFiles = computed(() => workspace.openFiles);
@@ -376,13 +364,6 @@ function handleContextMenu(payload: unknown, maybeEvent?: MouseEvent) {
   contextMenu.y = event.clientY;
   contextMenu.show = true;
   selectedKeys.value = [node.key];
-}
-
-function openCapRootMenu(event: MouseEvent) {
-  event.preventDefault();
-  capRootMenu.x = event.clientX;
-  capRootMenu.y = event.clientY;
-  capRootMenu.show = true;
 }
 
 function normalizeContextPayload(
@@ -694,22 +675,20 @@ async function pickWorkspace() {
   }
 }
 
-async function handleCapRootSelect(key: string) {
-  const platform = Fs.getPlatform();
-  if (platform !== 'capacitor') return;
+async function openPrivateWorkspace() {
+  if (!isCapacitor) return;
   try {
-    const { Directory } = await import('@capacitor/filesystem');
-    const dirMap = Directory as unknown as Record<string, CapDirectory>;
-    const dir = dirMap[key] ?? Directory.Documents;
-    const rootEntry = await Fs.pickDirectory(dir);
+    await Fs.ensureMobilePermissions();
+    const rootEntry = await Fs.getPrivateWorkspaceRoot();
     const treeEntries = await Fs.buildTree(rootEntry);
+    const rootKey = rootEntry.path ?? rootEntry.name;
     const rootNode: ExplorerNode = {
-      key: key,
-      label: key,
+      key: rootKey,
+      label: '应用工作区',
       type: 'folder',
-      path: '',
-      fsEntry: { ...rootEntry, name: key },
-      children: convertFsTreeToExplorer(treeEntries, ''),
+      path: rootKey,
+      fsEntry: rootEntry,
+      children: convertFsTreeToExplorer(treeEntries, rootKey),
     };
     explorerData.value = [rootNode];
     expandedKeys.value = [rootNode.key];
@@ -717,12 +696,41 @@ async function handleCapRootSelect(key: string) {
     contextMenu.node = null;
     await persistLastWorkspace(rootEntry);
     await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key, rootEntry.capDirectory);
-  } catch (e) {
-    console.error('选择根目录失败', e);
-  } finally {
-    capRootMenu.show = false;
+  } catch (error) {
+    console.error('打开私有工作区失败', error);
+    window.alert('❌ 无法打开应用私有工作区\n\n请确认已授权存储权限后重试');
   }
 }
+
+// async function handleCapRootSelect(key: string) {
+//   const platform = Fs.getPlatform();
+//   if (platform !== 'capacitor') return;
+//   try {
+//     const { Directory } = await import('@capacitor/filesystem');
+//     const dirMap = Directory as unknown as Record<string, CapDirectory>;
+//     const dir = dirMap[key] ?? Directory.Documents;
+//     const rootEntry = await Fs.pickDirectory(dir);
+//     const treeEntries = await Fs.buildTree(rootEntry);
+//     const rootNode: ExplorerNode = {
+//       key: key,
+//       label: key,
+//       type: 'folder',
+//       path: '',
+//       fsEntry: { ...rootEntry, name: key },
+//       children: convertFsTreeToExplorer(treeEntries, ''),
+//     };
+//     explorerData.value = [rootNode];
+//     expandedKeys.value = [rootNode.key];
+//     selectedKeys.value = [];
+//     contextMenu.node = null;
+//     await persistLastWorkspace(rootEntry);
+//     await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key, rootEntry.capDirectory);
+//   } catch (e) {
+//     console.error('选择根目录失败', e);
+//   } finally {
+//     capRootMenu.show = false;
+//   }
+// }
 
 function convertFsTreeToExplorer(
   entries: Array<FsEntry & { children?: FsEntry[] }>,

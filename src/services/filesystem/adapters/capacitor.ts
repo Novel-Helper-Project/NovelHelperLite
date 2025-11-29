@@ -5,6 +5,8 @@ import { FilePicker } from '@capawesome/capacitor-file-picker';
 import type { FsEntry, FsStat } from '../types';
 import { isFullDevicePath, toRelativeExternalPath } from '../path';
 
+const PRIVATE_ROOT = 'workspace';
+
 type PermissionSnapshot = {
   status?: string;
   state?: string;
@@ -26,6 +28,31 @@ function isGrantedPermission(p: unknown): boolean {
     );
   }
   return false;
+}
+
+async function ensurePrivateRoot(): Promise<void> {
+  try {
+    await Filesystem.mkdir({
+      path: PRIVATE_ROOT,
+      directory: Directory.External,
+      recursive: true,
+    });
+  } catch (err) {
+    const msg = (err as Error)?.message ?? '';
+    if (!/exist/i.test(msg)) {
+      console.warn('创建私有工作区目录失败', err);
+    }
+  }
+}
+
+export async function getPrivateWorkspaceRoot(): Promise<FsEntry> {
+  await ensurePrivateRoot();
+  return {
+    kind: 'directory',
+    name: PRIVATE_ROOT,
+    path: PRIVATE_ROOT,
+    capDirectory: Directory.External,
+  };
 }
 
 export async function ensureMobilePermissions(): Promise<void> {

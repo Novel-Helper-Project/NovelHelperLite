@@ -19,6 +19,7 @@ export interface FilesystemInterface {
   mkdir(targetDir: FsEntry, name: string): Promise<FsEntry>;
   remove(entry: FsEntry, parent?: FsEntry): Promise<void>;
   buildTree(dir: FsEntry): Promise<Array<FsEntry & { children?: FsEntry[] }>>;
+  getPrivateWorkspaceRoot?(): Promise<FsEntry>;
   checkFileSystemSupport(): {
     supported: boolean;
     browser?: string;

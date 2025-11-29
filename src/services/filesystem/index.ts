@@ -61,6 +61,12 @@ class UnifiedFilesystem implements FilesystemInterface {
     if (p === 'node') return NodeAdapter.remove(entry);
     return CapAdapter.remove(entry);
   }
+  async getPrivateWorkspaceRoot(): Promise<FsEntry> {
+    if (this.getPlatform() !== 'capacitor') {
+      throw new Error('私有工作区仅在移动端可用');
+    }
+    return CapAdapter.getPrivateWorkspaceRoot();
+  }
   async buildTree(dir: FsEntry): Promise<Array<FsEntry & { children?: FsEntry[] }>> {
     const p = this.getPlatform();
     if (p === 'web') return WebAdapter.buildTree(dir);
@@ -104,6 +110,7 @@ const Fs = {
   mkdir: (targetDir: FsEntry, name: string) => filesystem.mkdir(targetDir, name),
   remove: (entry: FsEntry, parent?: FsEntry) => filesystem.remove(entry, parent),
   buildTree: (dir: FsEntry) => filesystem.buildTree(dir),
+  getPrivateWorkspaceRoot: () => filesystem.getPrivateWorkspaceRoot(),
   checkFileSystemSupport: () => filesystem.checkFileSystemSupport(),
 };
 
