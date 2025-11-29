@@ -34,7 +34,31 @@
         </div>
       </div>
       <div class="row items-center gap-sm">
-        <q-btn dense flat icon="save" label="保存" :disable="!canSave" @click="saveCurrentFile" />
+        <q-btn
+          dense
+          flat
+          icon="content_copy"
+          title="复制"
+          :disable="!canUseClipboard"
+          @click="() => handleClipboard('copy')"
+        />
+        <q-btn
+          dense
+          flat
+          icon="content_paste"
+          title="粘贴"
+          :disable="!canUseClipboard"
+          @click="() => handleClipboard('paste')"
+        />
+        <q-btn
+          dense
+          flat
+          icon="content_cut"
+          title="剪切"
+          :disable="!canUseClipboard"
+          @click="() => handleClipboard('cut')"
+        />
+        <q-btn dense flat icon="save" :disable="!canSave" @click="saveCurrentFile" />
       </div>
     </div>
 
@@ -134,6 +158,7 @@ const monacoWrapperRef = ref<HTMLDivElement | null>(null);
 const tabbarRef = ref<HTMLDivElement | null>(null);
 const tabTrackRef = ref<HTMLDivElement | null>(null);
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
+const editorReady = ref(false);
 let disposables: monaco.IDisposable[] = [];
 const viewStates = new Map<string, monaco.editor.ICodeEditorViewState | null>();
 let resizeObserver: ResizeObserver | null = null;
@@ -206,12 +231,14 @@ const tabTrackStyle = computed(() => ({
 
 const canSave = computed(() => {
   const current = workspace.currentFile;
-  if (!current || !editor) return false;
+  if (!current) return false;
   if (current.onSave) return true;
+  if (!editorReady.value) return false;
   if (current.handle && current.handle.kind === 'file') return true;
   if (current.fsEntry && current.fsEntry.kind === 'file') return true;
   return false;
 });
+const canUseClipboard = computed(() => editorReady.value && showMonaco.value);
 const showMonaco = computed(() => !!workspace.currentFile && !workspace.currentFile.isImage);
 const imageFiles = computed(() =>
   workspace.openFiles.filter((f): f is OpenFile & { isImage: true } => !!f.isImage),
@@ -418,6 +445,79 @@ function handleTabTouchMove(event: TouchEvent) {
 
 function handleTabTouchEnd() {
   tabTouchStartX = null;
+}
+
+type ClipboardAction = 'copy' | 'paste' | 'cut';
+async function handleClipboard(action: ClipboardAction) {
+  if (!editor || !showMonaco.value) return;
+
+  const triggerAction = () => {
+    const actionId =
+      action === 'copy'
+        ? 'editor.action.clipboardCopyAction'
+        : action === 'paste'
+          ? 'editor.action.clipboardPasteAction'
+          : 'editor.action.clipboardCutAction';
+    editor?.focus();
+    editor?.trigger('toolbar', actionId, undefined);
+  };
+
+  const getSelections = (): monaco.Selection[] => {
+    const sels = editor?.getSelections();
+    if (sels && sels.length > 0) return sels;
+    const single = editor?.getSelection();
+    return single ? [single] : [];
+  };
+
+  if (action === 'paste') {
+    // 先尝试 Clipboard API，失败再回退到 Monaco 内置
+    const selections = getSelections();
+    if (selections.length) {
+      try {
+        const clip = (await navigator.clipboard?.readText?.()) ?? '';
+        if (clip) {
+          editor.focus();
+          editor.executeEdits(
+            'paste',
+            selections.map((sel) => ({ range: sel, text: clip })),
+          );
+          return;
+        }
+      } catch (err) {
+        console.warn('Clipboard read failed, fallback to Monaco action', err);
+      }
+    }
+    triggerAction();
+    return;
+  }
+
+  // copy / cut
+  try {
+    triggerAction();
+    return;
+  } catch {
+    // fallback below
+  }
+
+  const model = editor.getModel();
+  const selections = getSelections();
+  if (!model || !selections.length) return;
+
+  const texts = selections.map((sel) => model.getValueInRange(sel));
+  const joined = texts.join('\n');
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(joined);
+    } catch (err) {
+      console.warn('Clipboard write failed', err);
+    }
+  }
+  if (action === 'cut') {
+    editor.executeEdits(
+      'cut',
+      selections.map((sel) => ({ range: sel, text: '' })),
+    );
+  }
 }
 
 function applyPendingReveal() {
@@ -801,8 +901,9 @@ function ensureEditorSync() {
     language: 'plaintext',
     theme: 'vs-dark',
     automaticLayout: false,
-    ...(initialSize ? { dimension: initialSize } : {}),
+    ...(initialSize ? { dimension: initialSize } : { dimension: { width: 1, height: 1 } }),
   });
+  editorReady.value = true;
 
   disposables.push(
     editor.onDidChangeModelContent(() => {
@@ -884,6 +985,7 @@ function disposeEditor() {
   disposables.forEach((d) => d.dispose());
   disposables = [];
   editor = null;
+  editorReady.value = false;
 }
 </script>
 
