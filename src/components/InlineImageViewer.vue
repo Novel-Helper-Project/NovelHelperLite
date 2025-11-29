@@ -69,7 +69,7 @@
 
     <div class="viewer-footer">
       <div class="file-name" :title="imageName">{{ imageName }}</div>
-      <div class="viewer-hint">滚轮缩放 · 拖拽查看 · 双击重置 · 触摸缩放/拖拽</div>
+      <div class="viewer-hint">鼠标滚轮缩放 · 触摸板捏合/平移 · 拖拽查看 · 双击重置</div>
     </div>
   </div>
 </template>
@@ -101,7 +101,7 @@ const offsetY = ref(0);
 const flipX = ref(false);
 const flipY = ref(false);
 
-const MIN_SCALE = 0.2;
+const MIN_SCALE = 0.05;
 const MAX_SCALE = 8;
 const ZOOM_STEP = 0.15;
 
@@ -216,35 +216,109 @@ function resetView() {
   emitState();
 }
 
-// 鼠标滚轮缩放（以鼠标指针位置为中心）
+// 滚轮事件处理（区分触摸板捏合、触摸板平移和鼠标滚轮）
 function onWheel(e: WheelEvent) {
   if (!props.src) return;
   e.preventDefault();
   e.stopPropagation();
 
-  const delta = e.deltaY;
-  const factor = delta > 0 ? 1 - ZOOM_STEP : 1 + ZOOM_STEP;
-  const newScale = clampScale(scale.value * factor);
+  // 1. 判定是否为触摸板捏合手势（Ctrl+滚轮）
+  if (e.ctrlKey) {
+    // console.log('🤏 触摸板捏合缩放', {
+    //   ctrlKey: e.ctrlKey,
+    //   deltaX: e.deltaX,
+    //   deltaY: e.deltaY,
+    //   deltaMode: e.deltaMode,
+    //   deltaModeText: e.deltaMode === 0 ? 'PIXEL' : e.deltaMode === 1 ? 'LINE' : 'PAGE',
+    // });
 
-  // 获取画布的边界信息
-  if (!canvasRef.value) return;
-  const rect = canvasRef.value.getBoundingClientRect();
+    // 触摸板捏合缩放 - 以鼠标为中心缩放
+    const delta = e.deltaY;
+    // 触摸板捏合的 delta 通常较小，进一步降低敏感度
+    const factor = delta > 0 ? 1 - ZOOM_STEP * 0.2 : 1 + ZOOM_STEP * 0.2;
+    const newScale = clampScale(scale.value * factor);
 
-  // 计算鼠标在画布中的相对位置（相对于画布中心）
-  const mouseX = e.clientX - rect.left - rect.width / 2;
-  const mouseY = e.clientY - rect.top - rect.height / 2;
+    // 获取画布边界信息
+    if (!canvasRef.value) return;
+    const rect = canvasRef.value.getBoundingClientRect();
 
-  // 考虑当前偏移和缩放，计算鼠标在变换后坐标系中的位置
-  const worldX = (mouseX - offsetX.value) / scale.value;
-  const worldY = (mouseY - offsetY.value) / scale.value;
+    // 计算鼠标在画布中的相对位置
+    const mouseX = e.clientX - rect.left - rect.width / 2;
+    const mouseY = e.clientY - rect.top - rect.height / 2;
 
-  // 应用新缩放
-  scale.value = newScale;
+    // 计算世界坐标
+    const worldX = (mouseX - offsetX.value) / scale.value;
+    const worldY = (mouseY - offsetY.value) / scale.value;
 
-  // 重新计算偏移量，使鼠标位置保持在屏幕上的同一位置
-  offsetX.value = mouseX - worldX * scale.value;
-  offsetY.value = mouseY - worldY * scale.value;
-  emitState();
+    // 应用新缩放
+    scale.value = newScale;
+
+    // 重新计算偏移量，使缩放中心保持在鼠标位置
+    offsetX.value = mouseX - worldX * scale.value;
+    offsetY.value = mouseY - worldY * scale.value;
+    emitState();
+    return;
+  }
+
+  // 2. 判定是否为普通物理鼠标滚轮
+  // 使用 deltaMode 和 delta 绝对值来区分
+  const isMouseWheel = e.deltaMode === 1 || Math.abs(e.deltaY) >= 50;
+
+  if (isMouseWheel) {
+    // console.log('🖱️ 普通鼠标滚轮缩放', {
+    //   ctrlKey: e.ctrlKey,
+    //   deltaX: e.deltaX,
+    //   deltaY: e.deltaY,
+    //   deltaMode: e.deltaMode,
+    //   deltaModeText: e.deltaMode === 0 ? 'PIXEL' : e.deltaMode === 1 ? 'LINE' : 'PAGE',
+    //   absDeltaY: Math.abs(e.deltaY),
+    //   reason: e.deltaMode === 1 ? 'deltaMode=1(LINE)' : `absDeltaY=${Math.abs(e.deltaY)} >= 50`,
+    // });
+
+    // 普通鼠标滚轮 - 执行缩放
+    const delta = e.deltaY;
+    const factor = delta > 0 ? 1 - ZOOM_STEP : 1 + ZOOM_STEP;
+    const newScale = clampScale(scale.value * factor);
+
+    // 获取画布边界信息
+    if (!canvasRef.value) return;
+    const rect = canvasRef.value.getBoundingClientRect();
+
+    // 计算鼠标在画布中的相对位置
+    const mouseX = e.clientX - rect.left - rect.width / 2;
+    const mouseY = e.clientY - rect.top - rect.height / 2;
+
+    // 计算世界坐标
+    const worldX = (mouseX - offsetX.value) / scale.value;
+    const worldY = (mouseY - offsetY.value) / scale.value;
+
+    // 应用新缩放
+    scale.value = newScale;
+
+    // 重新计算偏移量，使缩放中心保持在鼠标位置
+    offsetX.value = mouseX - worldX * scale.value;
+    offsetY.value = mouseY - worldY * scale.value;
+    emitState();
+  } else {
+    // console.log('👆 触摸板双指滑动/Magic Mouse平移', {
+    //   ctrlKey: e.ctrlKey,
+    //   deltaX: e.deltaX,
+    //   deltaY: e.deltaY,
+    //   deltaMode: e.deltaMode,
+    //   deltaModeText: e.deltaMode === 0 ? 'PIXEL' : e.deltaMode === 1 ? 'LINE' : 'PAGE',
+    //   absDeltaY: Math.abs(e.deltaY),
+    //   reason: e.deltaMode === 0 ? 'deltaMode=0(PIXEL)' : `absDeltaY=${Math.abs(e.deltaY)} < 50`,
+    // });
+
+    // 触摸板双指滑动 / Magic Mouse - 执行平移
+    // 触摸板可以同时提供 deltaX 和 deltaY
+    const moveX = e.deltaX;
+    const moveY = e.deltaY;
+
+    offsetX.value += moveX;
+    offsetY.value += moveY;
+    emitState();
+  }
 }
 
 // 鼠标拖拽
@@ -287,7 +361,7 @@ function getTouchDistance(t1: Touch, t2: Touch) {
 function getTouchAngle(t1: Touch, t2: Touch) {
   const dx = t2.clientX - t1.clientX;
   const dy = t2.clientY - t1.clientY;
-  return Math.atan2(dy, dx) * 180 / Math.PI;
+  return (Math.atan2(dy, dx) * 180) / Math.PI;
 }
 
 function onTouchStart(e: TouchEvent) {
