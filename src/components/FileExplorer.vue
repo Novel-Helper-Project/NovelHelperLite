@@ -348,7 +348,7 @@ async function restoreLastWorkspace() {
     expandedKeys.value = [rootKey];
     selectedKeys.value = [];
     contextMenu.node = null;
-    await switchWorkspace(rootKey, normalizedPath);
+    await switchWorkspace(rootKey, normalizedPath, rootEntry.capDirectory);
   } catch (error) {
     console.warn('恢复最近打开的文件夹失败', error);
   }
@@ -606,7 +606,7 @@ async function pickWorkspace() {
       selectedKeys.value = [];
       contextMenu.node = null;
       await persistLastWorkspace(rootEntry);
-      await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
+      await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key, rootEntry.capDirectory);
       return;
     } catch (error) {
       console.error('选择目录失败:', error);
@@ -675,7 +675,7 @@ async function pickWorkspace() {
     selectedKeys.value = [];
     contextMenu.node = null;
     await persistLastWorkspace(rootEntry);
-    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
+    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key, rootEntry.capDirectory);
   } catch (error) {
     const errorMessage = (error as Error)?.message;
     if (
@@ -716,7 +716,7 @@ async function handleCapRootSelect(key: string) {
     selectedKeys.value = [];
     contextMenu.node = null;
     await persistLastWorkspace(rootEntry);
-    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key);
+    await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key, rootEntry.capDirectory);
   } catch (e) {
     console.error('选择根目录失败', e);
   } finally {

@@ -8,6 +8,7 @@ import {
 } from 'src/services/workspaceState';
 import type { EditorViewState, ImageViewState } from 'src/types/editorState';
 import type { FsEntry } from 'src/services/filesystem/types';
+import type { Directory as CapDirectory } from '@capacitor/filesystem';
 import { storage } from 'src/services/storage';
 
 const MAX_PERSIST_CONTENT_LENGTH = 400_000; // ~400 KB
@@ -35,6 +36,7 @@ type WorkspaceState = {
   rootHandle: FileSystemDirectoryHandle | null;
   workspaceId: string;
   workspacePath: string;
+  workspaceCapDirectory?: CapDirectory | null;
   sidebarPanelVisible: boolean;
   shellVisible: boolean;
 };
@@ -45,6 +47,7 @@ const state = reactive<WorkspaceState>({
   rootHandle: null,
   workspaceId: '',
   workspacePath: '',
+  workspaceCapDirectory: null,
   sidebarPanelVisible: true,
   shellVisible: true,
 });
@@ -285,6 +288,12 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<OpenFile> {
     name: file.name,
     content,
     handle: null,
+    fsEntry: {
+      kind: 'file',
+      name: file.name,
+      path: file.path,
+      ...(state.workspaceCapDirectory ? { capDirectory: state.workspaceCapDirectory } : {}),
+    },
     ...(savedContent !== undefined ? { savedContent } : {}),
     ...(file.mime ? { mime: file.mime } : {}),
     ...(typeof file.isImage === 'boolean' ? { isImage: file.isImage } : {}),
@@ -333,6 +342,47 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<OpenFile> {
     } catch {
       // ignore, fallback
     }
+  } else if (platform === 'capacitor') {
+    const capDirectory = state.workspaceCapDirectory;
+    try {
+      const entry: FsEntry = {
+        kind: 'file',
+        name: file.name,
+        path: file.path,
+        ...(capDirectory ? { capDirectory } : {}),
+      };
+      const blob = await Fs.getBlob(entry);
+      const mime = blob.type || file.mime;
+      const isImage = mime ? mime.startsWith('image/') : !!file.isImage;
+
+      if (isImage) {
+        const mediaUrl = URL.createObjectURL(blob);
+        const nextSavedContent = file.savedContent ?? '';
+        return {
+          ...base,
+          content: '',
+          ...(nextSavedContent !== undefined ? { savedContent: nextSavedContent } : {}),
+          ...(mime ? { mime } : {}),
+          isImage: true,
+          mediaUrl,
+          ...(file.imageState ? { imageState: file.imageState } : {}),
+          ...(file.viewState ? { viewState: file.viewState } : {}),
+        };
+      }
+
+      const content = await blob.text();
+      const nextSavedContent = file.savedContent ?? content;
+      return {
+        ...base,
+        content,
+        ...(nextSavedContent !== undefined ? { savedContent: nextSavedContent } : {}),
+        ...(mime ? { mime } : {}),
+        ...(file.imageState ? { imageState: file.imageState } : {}),
+        ...(file.viewState ? { viewState: file.viewState } : {}),
+      };
+    } catch {
+      // ignore, fallback
+    }
   }
 
   return base;
@@ -363,7 +413,11 @@ async function restoreWorkspaceState() {
   }
 }
 
-async function switchWorkspace(workspaceId: string, workspacePath?: string) {
+async function switchWorkspace(
+  workspaceId: string,
+  workspacePath?: string,
+  workspaceCapDirectory?: CapDirectory,
+) {
   if (persistTimer) {
     clearTimeout(persistTimer);
     persistTimer = null;
@@ -373,8 +427,10 @@ async function switchWorkspace(workspaceId: string, workspacePath?: string) {
   }
   const nextWorkspaceId = workspaceId || '';
   const nextWorkspacePath = workspacePath ?? nextWorkspaceId;
+  const nextCapDirectory = workspaceCapDirectory ?? null;
   state.workspaceId = nextWorkspaceId;
   state.workspacePath = nextWorkspacePath;
+  state.workspaceCapDirectory = nextCapDirectory;
   state.openFiles.splice(0, state.openFiles.length);
   state.currentFile = null;
   state.sidebarPanelVisible = true;
