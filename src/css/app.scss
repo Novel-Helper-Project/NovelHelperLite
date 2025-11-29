@@ -7,11 +7,49 @@
   --vscode-text: #dfe3ea;
   --vscode-muted: #9aa6b4;
   --vscode-accent: #4dabf7;
+
+  /* Safe Area insets for devices with display cutouts */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
 }
 
 body {
   background: var(--vscode-main-bg);
   color: var(--vscode-text);
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  margin: 0;
+  padding: 0;
+}
+
+/* Apply safe area padding to the outer layout */
+.safe-area {
+  /* 仅左右/底部留白，顶部由 safe-area-top 单独处理，避免双倍内边距 */
+  padding-right: var(--safe-area-inset-right);
+  padding-bottom: var(--safe-area-inset-bottom);
+  padding-left: var(--safe-area-inset-left);
+  box-sizing: border-box;
+}
+
+/* Safe-area helpers */
+.safe-area-top {
+  padding-top: var(--safe-area-inset-top);
+}
+
+.safe-area-horizontal {
+  padding-left: var(--safe-area-inset-left);
+  padding-right: var(--safe-area-inset-right);
+}
+
+.safe-area-container {
+  padding-top: var(--safe-area-inset-top);
+  padding-left: var(--safe-area-inset-left);
+  padding-right: var(--safe-area-inset-right);
 }
 
 .app-header {
