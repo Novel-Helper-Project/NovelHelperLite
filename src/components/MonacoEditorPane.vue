@@ -147,6 +147,8 @@ const tabScroll = ref(0);
 const tabMetrics = reactive({ viewport: 0, content: 0 });
 const tabSizes = new Map<string, number>();
 const tabSizesVersion = ref(0);
+let tabTouchStartX: number | null = null;
+let tabTouchStartScroll = 0;
 const TAB_GAP = 4;
 const TAB_OVERSCAN = 120;
 
@@ -239,6 +241,11 @@ onMounted(() => {
   window.addEventListener('workspace-reveal', revealListener);
   tabbarWheelListener = (event: WheelEvent) => handleTabbarWheel(event);
   tabbarRef.value?.addEventListener('wheel', tabbarWheelListener, { passive: false });
+  if (tabbarRef.value) {
+    tabbarRef.value.addEventListener('touchstart', handleTabTouchStart, { passive: true });
+    tabbarRef.value.addEventListener('touchmove', handleTabTouchMove, { passive: false });
+    tabbarRef.value.addEventListener('touchend', handleTabTouchEnd, { passive: true });
+  }
   measureTabs();
   if ('ResizeObserver' in window) {
     tabResizeObserver = new ResizeObserver(() => measureTabs());
@@ -357,6 +364,11 @@ onBeforeUnmount(() => {
   if (tabbarWheelListener && tabbarRef.value) {
     tabbarRef.value.removeEventListener('wheel', tabbarWheelListener);
   }
+  if (tabbarRef.value) {
+    tabbarRef.value.removeEventListener('touchstart', handleTabTouchStart);
+    tabbarRef.value.removeEventListener('touchmove', handleTabTouchMove);
+    tabbarRef.value.removeEventListener('touchend', handleTabTouchEnd);
+  }
   if (tabResizeObserver) {
     tabResizeObserver.disconnect();
     tabResizeObserver = null;
@@ -385,6 +397,27 @@ function handleTabbarWheel(event: WheelEvent) {
   if (delta === 0) return;
   event.preventDefault();
   updateTabScroll(tabScroll.value + delta);
+}
+
+function handleTabTouchStart(event: TouchEvent) {
+  if (!event.touches?.length) return;
+  tabTouchStartX = event.touches[0]?.clientX ?? null;
+  tabTouchStartScroll = tabScroll.value;
+}
+
+function handleTabTouchMove(event: TouchEvent) {
+  if (tabTouchStartX == null) return;
+  if (!event.touches?.length) return;
+  const currentX = event.touches[0]?.clientX ?? tabTouchStartX;
+  const delta = tabTouchStartScroll + (tabTouchStartX - currentX);
+  if (Math.abs(tabTouchStartX - currentX) > 2) {
+    event.preventDefault();
+  }
+  updateTabScroll(delta);
+}
+
+function handleTabTouchEnd() {
+  tabTouchStartX = null;
 }
 
 function applyPendingReveal() {
