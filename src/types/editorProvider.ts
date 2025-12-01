@@ -263,10 +263,26 @@ class EditorRegistry {
   }
 
   /**
+   * 根据编辑器 ID 获取编辑器
+   */
+  getEditorById(editorId: string): EditorProvider | null {
+    return this.providers.find(p => p.id === editorId) || null;
+  }
+
+  /**
    * 获取当前文件的所有工具栏按钮
    */
   getToolbarActions(file: OpenFile): ToolbarAction[] {
-    const editor = this.getEditor(file, true);
+    // 优先使用文件记录的实际编辑器 ID
+    let editor: EditorProvider | null = null;
+    if (file.activeEditorId) {
+      editor = this.getEditorById(file.activeEditorId);
+    }
+    // 如果没有记录,则回退到匹配逻辑
+    if (!editor) {
+      editor = this.getEditor(file, true);
+    }
+
     if (!editor || !editor.toolbarActions) {
       return [];
     }

@@ -34,7 +34,8 @@ export type OpenFile = {
   savedContent?: string;
   imageState?: ImageViewState;
   viewState?: EditorViewState;
-  editorMode?: EditorMode; // 编辑器模式
+  editorMode?: EditorMode; // 编辑器模式 (Monaco/Milkdown 切换用)
+  activeEditorId?: string; // 当前实际使用的编辑器 ID
 };
 
 type WorkspaceState = {
@@ -170,6 +171,15 @@ function setEditorMode(path: string, mode: EditorMode) {
     state.currentFile.editorMode = mode;
   }
   schedulePersist();
+}
+
+function setActiveEditorId(path: string, editorId: string) {
+  const target = state.openFiles.find((f) => f.path === path);
+  if (!target) return;
+  target.activeEditorId = editorId;
+  if (state.currentFile?.path === path) {
+    state.currentFile.activeEditorId = editorId;
+  }
 }
 
 function buildContentKey(workspaceId: string, path: string, kind: 'content' | 'saved') {
@@ -506,5 +516,6 @@ export function useWorkspaceStore() {
     setImageViewState,
     setEditorViewState,
     setEditorMode,
+    setActiveEditorId,
   };
 }

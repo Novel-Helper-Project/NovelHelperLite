@@ -103,6 +103,9 @@ const {
 // 计算当前文件的工具栏按钮
 const toolbarActions = computed(() => {
   if (!workspace.currentFile) return [];
+  // 显式依赖 activeEditorId 以确保响应式更新
+  const _activeEditorId = workspace.currentFile.activeEditorId;
+  void _activeEditorId; // 触发响应式依赖
   return editorRegistry.getToolbarActions(workspace.currentFile);
 });
 

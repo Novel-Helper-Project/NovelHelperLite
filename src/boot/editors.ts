@@ -5,11 +5,38 @@ import MonacoEditor from 'src/components/editors/MonacoEditor.vue';
 import ImageEditor from 'src/components/editors/ImageEditor.vue';
 import SettingsEditor from 'src/components/editors/SettingsEditor.vue';
 import MilkdownEditorWrapper from 'src/components/editors/MilkdownEditorWrapper.vue';
-import UmoViewerEditor from 'src/components/editors/UmoViewerEditor.vue';
+// UmoViewerEditor 改为动态导入，避免其依赖影响全局事件监听器
+import { defineAsyncComponent, markRaw } from 'vue';
+const UmoViewerEditor = defineAsyncComponent(() => import('src/components/editors/UmoViewerEditor.vue'));
 import { saveFile } from 'src/services/fileSaver';
 import { useWorkspaceStore } from 'src/stores/workspace';
 import { invokeEditorCommand } from 'src/services/editorCommands';
 import { Notify } from 'quasar';
+
+/**
+ * 配置 Monaco Editor 的 Web Workers
+ */
+//TODO 需要支持更多类型的高亮worker
+if (typeof window !== 'undefined') {
+  const globalWindow = window as unknown as Record<string, object>;
+  globalWindow.MonacoEnvironment = {
+    getWorkerUrl: (moduleId: string, label: string) => {
+      if (label === 'json') {
+        return '/workers/json.worker.js';
+      }
+      if (label === 'css' || label === 'scss' || label === 'less') {
+        return '/workers/css.worker.js';
+      }
+      if (label === 'html' || label === 'handlebars' || label === 'razor') {
+        return '/workers/html.worker.js';
+      }
+      if (label === 'typescript' || label === 'javascript') {
+        return '/workers/ts.worker.js';
+      }
+      return '/workers/editor.worker.js';
+    },
+  };
+}
 
 /**
  * 设置编辑器提供器
@@ -18,7 +45,7 @@ const settingsEditorProvider: EditorProvider = {
   id: 'settings',
   name: '设置',
   description: '应用程序设置界面',
-  component: SettingsEditor,
+  component: markRaw(SettingsEditor),
   supportedFileTypes: [
     {
       matcher: (file) => !!file.isSettings,
@@ -34,7 +61,7 @@ const imageEditorProvider: EditorProvider = {
   id: 'image',
   name: '图片查看器',
   description: '查看和预览图片文件',
-  component: ImageEditor,
+  component: markRaw(ImageEditor),
   supportedFileTypes: [
     {
       extensions: ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico'],
@@ -51,7 +78,7 @@ const milkdownEditorProvider: EditorProvider = {
   id: 'milkdown',
   name: 'Milkdown 编辑器',
   description: '所见即所得的 Markdown 编辑器',
-  component: MilkdownEditorWrapper,
+  component: markRaw(MilkdownEditorWrapper),
   supportedFileTypes: [
     {
       // 只通过 matcher 匹配,不使用扩展名自动匹配
@@ -101,7 +128,7 @@ const monacoEditorProvider: EditorProvider = {
   id: 'monaco',
   name: 'Monaco 编辑器',
   description: '强大的代码编辑器,支持语法高亮和智能提示',
-  component: MonacoEditor,
+  component: markRaw(MonacoEditor),
   supportedFileTypes: [
     {
       // 一级匹配:明确支持的文本文件扩展名
@@ -242,7 +269,7 @@ const pdfViewerProvider: EditorProvider = {
   id: 'umo-pdf-viewer',
   name: 'Umo PDF Viewer',
   description: 'PDF 预览',
-  component: UmoViewerEditor,
+  component: markRaw(UmoViewerEditor),
   supportedFileTypes: [
     {
       extensions: ['.pdf'],

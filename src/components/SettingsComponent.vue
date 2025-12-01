@@ -131,11 +131,11 @@
             />
             <span class="control-value">{{ localSettings.editor.tabSize }}</span>
           </div>
-        <p class="setting-desc">制表符对应的空格数量。</p>
-      </div>
-      <div class="setting-item">
-        <label class="setting-label">
-          <input
+          <p class="setting-desc">制表符对应的空格数量。</p>
+        </div>
+        <div class="setting-item">
+          <label class="setting-label">
+            <input
               type="checkbox"
               v-model="localSettings.editor.wordWrap"
               @change="onEditorWordWrapChange"
@@ -143,6 +143,27 @@
             自动换行
           </label>
           <p class="setting-desc">超过编辑器宽度的长行是否自动换行显示。</p>
+        </div>
+      </div>
+
+      <!-- 调试设置 -->
+      <div class="settings-section">
+        <h2 class="section-title">
+          <span class="material-icons">bug_report</span>
+          调试
+        </h2>
+        <div class="setting-item">
+          <label class="setting-label">
+            <input
+              type="checkbox"
+              v-model="localSettings.debug.showEditorInfo"
+              @change="onDebugShowEditorInfoChange"
+            />
+            显示编辑器调试信息
+          </label>
+          <p class="setting-desc">
+            在屏幕右下角显示一个悬浮窗，显示当前打开的文件和编辑器信息，用于调试。
+          </p>
         </div>
       </div>
 
@@ -184,6 +205,9 @@ const localSettings = ref({
     fontFamily: '',
     tabSize: 4,
     wordWrap: true,
+  },
+  debug: {
+    showEditorInfo: false,
   },
 });
 
@@ -235,6 +259,10 @@ function onEditorTabSizeChange() {
 
 function onEditorWordWrapChange() {
   settingsStore.setEditorWordWrap(localSettings.value.editor.wordWrap);
+}
+
+function onDebugShowEditorInfoChange() {
+  settingsStore.setDebugShowEditorInfo(localSettings.value.debug.showEditorInfo);
 }
 
 function resetAllSettings() {

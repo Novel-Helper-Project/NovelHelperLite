@@ -26,6 +26,9 @@
         <router-view />
       </div>
     </q-page-container>
+
+    <!-- 调试悬浮窗 -->
+    <DebugOverlay />
   </q-layout>
 </template>
 
@@ -33,6 +36,7 @@
 import { computed } from 'vue';
 import { useQuasar } from 'quasar';
 import VscodeSidebar from 'components/VscodeSidebar.vue';
+import DebugOverlay from 'components/DebugOverlay.vue';
 import { useWorkspaceStore } from 'src/stores/workspace';
 
 const $q = useQuasar();

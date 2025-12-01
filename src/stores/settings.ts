@@ -18,6 +18,11 @@ interface SettingsState {
     tabSize: number;
     wordWrap: boolean;
   };
+
+  // 调试设置
+  debug: {
+    showEditorInfo: boolean; // 是否显示编辑器调试信息悬浮窗
+  };
 }
 
 export const useSettingsStore = defineStore('settings', {
@@ -33,6 +38,9 @@ export const useSettingsStore = defineStore('settings', {
       fontFamily: 'Monaco, Consolas, "Courier New", monospace',
       tabSize: 4,
       wordWrap: true,
+    },
+    debug: {
+      showEditorInfo: false, // 默认关闭
     },
   }),
 
@@ -118,6 +126,12 @@ export const useSettingsStore = defineStore('settings', {
 
     setEditorWordWrap(wrap: boolean) {
       this.editor.wordWrap = wrap;
+      this.saveToStorage();
+    },
+
+    // 调试设置
+    setDebugShowEditorInfo(show: boolean) {
+      this.debug.showEditorInfo = show;
       this.saveToStorage();
     },
 

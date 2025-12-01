@@ -25,6 +25,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { Dialog } from 'quasar';
 import type { OpenFile } from 'src/stores/workspace';
+import { useWorkspaceStore } from 'src/stores/workspace';
 import { editorRegistry } from 'src/types/editorProvider';
 import type { EditorProvider } from 'src/types/editorProvider';
 import type { ImageViewState, EditorViewState } from 'src/types/editorState';
@@ -32,6 +33,8 @@ import type { ImageViewState, EditorViewState } from 'src/types/editorState';
 const props = defineProps<{
   file: OpenFile;
 }>();
+
+const { setActiveEditorId } = useWorkspaceStore();
 
 const emit = defineEmits<{
   'update:content': [content: string];
@@ -228,6 +231,17 @@ watch(
   () => {
     selectEditor();
   },
+);
+
+// 当选定的编辑器变化时,同步到文件的 activeEditorId
+watch(
+  selectedEditor,
+  (newEditor) => {
+    if (newEditor && props.file.path) {
+      setActiveEditorId(props.file.path, newEditor.id);
+    }
+  },
+  { immediate: true },
 );
 
 // 生命周期钩子
