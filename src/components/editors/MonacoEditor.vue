@@ -91,6 +91,15 @@ function updateSelectionHandles() {
     return;
   }
 
+  // 计算相对容器的偏移, 修正内层 overflow guard 的位移
+  const editorDom = editor.getDomNode();
+  const host = editorEl.value;
+  if (!editorDom || !host) return;
+  const hostRect = host.getBoundingClientRect();
+  const editorRect = editorDom.getBoundingClientRect();
+  const offsetX = editorRect.left - hostRect.left;
+  const offsetY = editorRect.top - hostRect.top;
+
   // 获取行高，用于设置手柄的高度
   const lineHeight = editor.getOption(monaco.editor.EditorOption.lineHeight);
 
@@ -98,15 +107,15 @@ function updateSelectionHandles() {
 
   // 更新样式
   selectionHandles.startStyle = {
-    top: `${startScrolled.top}px`,
-    left: `${startScrolled.left}px`,
+    top: `${startScrolled.top + offsetY}px`,
+    left: `${startScrolled.left + offsetX}px`,
     height: `${startScrolled.height || lineHeight}px`,
     display: 'block',
   };
 
   selectionHandles.endStyle = {
-    top: `${endScrolled.top}px`,
-    left: `${endScrolled.left}px`,
+    top: `${endScrolled.top + offsetY}px`,
+    left: `${endScrolled.left + offsetX}px`,
     height: `${endScrolled.height || lineHeight}px`,
     display: 'block',
   };
