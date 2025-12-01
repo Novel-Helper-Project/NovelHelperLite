@@ -499,7 +499,7 @@ watch(
   border: 1px solid var(--vscode-border);
   border-radius: 0;
   overflow: hidden;
-  background: linear-gradient(180deg, #0f141c 0%, #0c1016 100%);
+  background: var(--vscode-editor-background);
   z-index: 1;
 }
 
@@ -535,9 +535,9 @@ watch(
   align-items: center;
   padding: 4px 6px;
   border-radius: 8px;
-  background: rgba(15, 18, 22, 0.95);
+  background: var(--vscode-sideBar-background);
   backdrop-filter: blur(10px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 10;
   border: 1px solid var(--vscode-border);
 }
@@ -560,7 +560,7 @@ watch(
   font-size: 12px;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(15, 18, 22, 0.85);
+  background: var(--vscode-sideBar-background);
   backdrop-filter: blur(10px);
   border: 1px solid var(--vscode-border);
   z-index: 10;
