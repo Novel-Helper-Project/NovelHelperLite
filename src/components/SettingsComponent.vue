@@ -2,9 +2,27 @@
   <div class="settings-page">
     <div class="settings-header">
       <h1 class="page-title">设置</h1>
+      <div class="header-tabs">
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'settings' }"
+          type="button"
+          @click="activeTab = 'settings'"
+        >
+          设置
+        </button>
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'about' }"
+          type="button"
+          @click="activeTab = 'about'"
+        >
+          关于
+        </button>
+      </div>
     </div>
 
-    <div class="settings-content">
+    <div v-if="activeTab === 'settings'" class="settings-content">
       <!-- 图片查看器设置 -->
       <div class="settings-section">
         <h2 class="section-title">
@@ -113,11 +131,11 @@
             />
             <span class="control-value">{{ localSettings.editor.tabSize }}</span>
           </div>
-          <p class="setting-desc">制表符对应的空格数量。</p>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label">
-            <input
+        <p class="setting-desc">制表符对应的空格数量。</p>
+      </div>
+      <div class="setting-item">
+        <label class="setting-label">
+          <input
               type="checkbox"
               v-model="localSettings.editor.wordWrap"
               @change="onEditorWordWrapChange"
@@ -135,14 +153,21 @@
           重置所有设置
         </button>
         <p class="setting-desc">将所有设置恢复为默认值。此操作不可撤销。</p>
+        <div class="about-shortcut">
+          <span>想了解更多？</span>
+          <button class="link-btn" type="button" @click="activeTab = 'about'">打开关于页</button>
+        </div>
       </div>
     </div>
+
+    <AboutCard v-else :version="appVersion" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useSettingsStore } from 'src/stores/settings';
+import AboutCard from './AboutCard.vue';
 
 const settingsStore = useSettingsStore();
 
@@ -161,6 +186,12 @@ const localSettings = ref({
     wordWrap: true,
   },
 });
+
+const activeTab = ref<'settings' | 'about'>('settings');
+const appVersion =
+  (import.meta.env.VITE_APP_VERSION as string | undefined) ||
+  (import.meta.env.PACKAGE_VERSION as string | undefined) ||
+  '未设置';
 
 // 初始化设置
 onMounted(() => {
@@ -230,6 +261,7 @@ function resetAllSettings() {
   padding: 16px;
   border-bottom: 1px solid var(--vscode-border);
   background: var(--vscode-sideBar-background);
+  justify-content: space-between;
 }
 
 .page-title {
@@ -237,6 +269,27 @@ function resetAllSettings() {
   font-weight: 600;
   margin: 0;
   color: var(--vscode-sideBar-foreground);
+}
+
+.header-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.tab-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--vscode-border);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border-color: var(--vscode-button-border);
 }
 
 .settings-content {
@@ -399,6 +452,28 @@ input[type='range']::-webkit-slider-thumb:hover {
   margin: 16px;
 }
 
+.about-shortcut {
+  padding: 0 16px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.link-btn {
+  border: 1px solid var(--vscode-border);
+  background: transparent;
+  color: var(--vscode-text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.link-btn:hover {
+  background: var(--vscode-list-hoverBackground);
+}
 .reset-btn:hover {
   background: var(--vscode-button-hoverBackground);
 }
