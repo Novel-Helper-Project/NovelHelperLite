@@ -241,10 +241,18 @@ class EditorRegistry {
 
   /**
    * 获取最适合处理该文件的编辑器(优先级最高的)
+   * @param includeSecondary 是否包含二级匹配
    */
-  getEditor(file: OpenFile): EditorProvider | null {
-    const compatible = this.getCompatibleEditors(file);
-    return compatible[0] || null;
+  getEditor(file: OpenFile, includeSecondary = false): EditorProvider | null {
+    if (includeSecondary) {
+      const secondary = this.getSecondaryEditors(file);
+      if (secondary.length) {
+        const first = secondary[0];
+        if (first?.provider) return first.provider;
+      }
+    }
+    const primary = this.getCompatibleEditors(file);
+    return primary[0] || null;
   }
 
   /**
@@ -258,7 +266,7 @@ class EditorRegistry {
    * 获取当前文件的所有工具栏按钮
    */
   getToolbarActions(file: OpenFile): ToolbarAction[] {
-    const editor = this.getEditor(file);
+    const editor = this.getEditor(file, true);
     if (!editor || !editor.toolbarActions) {
       return [];
     }
