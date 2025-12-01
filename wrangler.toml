@@ -1,14 +1,11 @@
-# wrangler.toml - Cloudflare Pages 配置
 name = "novel-helper-lite"
+main = "src/worker.ts"
 compatibility_date = "2025-11-12"
 
-# Pages 配置 - 指定构建输出目录
-pages_build_output_dir = "dist/spa"
+workers_dev = false
 
-# 构建配置（可选 - Cloudflare Pages 会使用项目的构建命令）
-# 构建命令：npm run build
-# 输出目录：dist/spa
+assets = { directory = "dist/spa", binding = "ASSETS" }
 
-# 环境变量
-[vars]
-# 添加环境变量
+[[routes]]
+pattern = "lite-editor.sirrus.cc"
+custom_domain = true
