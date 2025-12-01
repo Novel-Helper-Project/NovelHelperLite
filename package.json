@@ -24,8 +24,10 @@
     "test": "echo \"No test specified\" && exit 0",
     "dev": "quasar dev",
     "build": "quasar build",
+    "build:cf": "quasar build -m spa",
     "postinstall": "quasar prepare",
     "deploy": "npm run build && wrangler pages deploy dist/spa",
+    "deploy:cf": "npm run build:cf && wrangler pages deploy dist/spa",
     "deploy:preview": "npm run build && wrangler pages deploy dist/spa --preview"
   },
   "dependencies": {
