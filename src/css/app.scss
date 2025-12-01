@@ -1,5 +1,6 @@
-// VS Code inspired shell
-:root {
+// Theme System - Dark Mode (default)
+:root,
+.theme-dark {
   --vscode-activity-bg: #20252c;
   --vscode-sidebar-bg: #1b1f26;
   --vscode-main-bg: #0f1216;
@@ -8,11 +9,84 @@
   --vscode-muted: #9aa6b4;
   --vscode-accent: #4dabf7;
 
+  // Editor colors
+  --vscode-editor-background: #0f1216;
+  --vscode-editor-foreground: #dfe3ea;
+  --vscode-foreground: #dfe3ea;
+
+  // Sidebar colors
+  --vscode-sideBar-background: #1b1f26;
+  --vscode-sideBar-foreground: #dfe3ea;
+  --vscode-sideBar-border: #2c333d;
+
+  // Input colors
+  --vscode-input-background: #1b1f26;
+  --vscode-input-foreground: #dfe3ea;
+  --vscode-input-border: #2c333d;
+  --vscode-focusBorder: #4dabf7;
+
+  // Button colors
+  --vscode-button-background: #4dabf7;
+  --vscode-button-foreground: #0f1216;
+  --vscode-button-hoverBackground: #339af0;
+  --vscode-button-border: #4dabf7;
+  --vscode-button-secondaryBackground: #20252c;
+  --vscode-button-secondaryBorder: #2c333d;
+  --vscode-button-secondaryHoverBackground: #2c333d;
+
+  // Slider colors
+  --vscode-slider-background: #2c333d;
+
+  // Description colors
+  --vscode-descriptionForeground: #9aa6b4;
+
   /* Safe Area insets for devices with display cutouts */
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+// Theme System - Light Mode
+.theme-light {
+  --vscode-activity-bg: #e8eaed;
+  --vscode-sidebar-bg: #f3f4f6;
+  --vscode-main-bg: #ffffff;
+  --vscode-border: #d1d5db;
+  --vscode-text: #1f2937;
+  --vscode-muted: #6b7280;
+  --vscode-accent: #2563eb;
+
+  // Editor colors
+  --vscode-editor-background: #ffffff;
+  --vscode-editor-foreground: #1f2937;
+  --vscode-foreground: #1f2937;
+
+  // Sidebar colors
+  --vscode-sideBar-background: #f3f4f6;
+  --vscode-sideBar-foreground: #1f2937;
+  --vscode-sideBar-border: #d1d5db;
+
+  // Input colors
+  --vscode-input-background: #ffffff;
+  --vscode-input-foreground: #1f2937;
+  --vscode-input-border: #d1d5db;
+  --vscode-focusBorder: #2563eb;
+
+  // Button colors
+  --vscode-button-background: #2563eb;
+  --vscode-button-foreground: #ffffff;
+  --vscode-button-hoverBackground: #1d4ed8;
+  --vscode-button-border: #2563eb;
+  --vscode-button-secondaryBackground: #e8eaed;
+  --vscode-button-secondaryBorder: #d1d5db;
+  --vscode-button-secondaryHoverBackground: #d1d5db;
+
+  // Slider colors
+  --vscode-slider-background: #e8eaed;
+
+  // Description colors
+  --vscode-descriptionForeground: #6b7280;
 }
 
 body {
@@ -61,6 +135,11 @@ html {
     font-size: 12px;
     color: var(--vscode-muted);
   }
+}
+
+.theme-light .app-header {
+  background: #f3f4f6;
+  color: #1f2937;
 }
 
 .workspace-shell {
@@ -128,6 +207,16 @@ html {
   }
 }
 
+.theme-light .activity-btn {
+  &:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  &.is-active {
+    background: #d1d5db;
+  }
+}
+
 .sidebar-panel {
   flex: 1;
   display: flex;
@@ -178,6 +267,10 @@ html {
     margin: 0;
     font-size: 12px;
   }
+}
+
+.theme-light .panel-placeholder {
+  background: linear-gradient(145deg, #f9fafb 0%, #f3f4f6 100%);
 }
 
 .vscode-explorer {

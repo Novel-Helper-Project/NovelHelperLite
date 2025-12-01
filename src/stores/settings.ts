@@ -59,7 +59,45 @@ export const useSettingsStore = defineStore('settings', {
     // 更新主题设置
     setThemeMode(mode: 'light' | 'dark' | 'auto') {
       this.theme.mode = mode;
+      this.applyTheme();
       this.saveToStorage();
+    },
+
+    // 应用主题到 DOM
+    applyTheme() {
+      const isDark = this.isDarkMode;
+      const bodyClasses = document.body.classList;
+
+      // 移除所有主题类
+      bodyClasses.remove('theme-light', 'theme-dark');
+
+      // 添加当前主题类
+      bodyClasses.add(isDark ? 'theme-dark' : 'theme-light');
+
+      // 设置 Quasar 的暗色模式
+      void import('quasar').then(({ Dark }) => {
+        Dark.set(isDark);
+      });
+    },
+
+    // 监听系统主题变化
+    watchSystemTheme() {
+      if (typeof window === 'undefined') return;
+
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handler = () => {
+        if (this.theme.mode === 'auto') {
+          this.applyTheme();
+        }
+      };
+
+      // 现代浏览器使用 addEventListener
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', handler);
+      } else {
+        // 旧浏览器使用 addListener
+        mediaQuery.addListener(handler);
+      }
     },
 
     // 更新编辑器设置
@@ -100,6 +138,9 @@ export const useSettingsStore = defineStore('settings', {
       } catch (error) {
         console.warn('加载设置失败，使用默认设置:', error);
       }
+      // 加载后立即应用主题
+      this.applyTheme();
+      this.watchSystemTheme();
     },
 
     // 保存设置到本地存储

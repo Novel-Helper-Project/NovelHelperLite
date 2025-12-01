@@ -1187,4 +1187,74 @@ function showCompatibilityHelp() {
   border-color: rgba(77, 171, 247, 0.6);
   color: #fff;
 }
+
+/* 浅色模式适配 */
+.theme-light :deep(.tree-scroll .n-tree) {
+  --n-node-color-hover: rgba(37, 99, 235, 0.08);
+  --n-node-color-pressed: rgba(37, 99, 235, 0.12);
+  --n-node-color-active: rgba(37, 99, 235, 0.1);
+  --n-node-text-color: #1f2937;
+  --n-node-text-color-disabled: #9ca3af;
+  --n-node-text-color-active: #1f2937;
+}
+
+.theme-light :deep(.tree-scroll .n-tree-node-wrapper:hover) {
+  background: rgba(37, 99, 235, 0.08) !important;
+  color: #1f2937;
+}
+
+.theme-light :deep(.tree-scroll .n-tree-node-wrapper .n-tree-node--selected) {
+  background: rgba(37, 99, 235, 0.15) !important;
+  color: #1f2937 !important;
+}
+
+.theme-light :deep(.tree-scroll .n-tree-node-content) {
+  color: #1f2937;
+}
+
+.theme-light :deep(.tree-scroll .n-tree-node-content:hover) {
+  color: #1f2937;
+}
+
+.theme-light :deep(.tree-scroll .n-tree-node--selected .n-tree-node-content) {
+  color: #1f2937 !important;
+}
+
+.theme-light :deep(.tree-scroll .n-tree-node-content .n-tree-node-content__text) {
+  color: #1f2937;
+}
+
+.theme-light :deep(.tree-scroll .n-tree-node-switcher) {
+  color: #6b7280;
+}
+
+.theme-light :deep(.tree-scroll .n-tree-node-content .n-tree-node-content__prefix) {
+  color: #6b7280;
+}
+
+.theme-light
+  :deep(.tree-scroll .n-tree-node--selected .n-tree-node-content .n-tree-node-content__prefix),
+.theme-light :deep(.tree-scroll .n-tree-node-content:hover .n-tree-node-content__prefix) {
+  color: #1f2937;
+}
+
+.theme-light .opened-close:hover {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1f2937;
+}
+
+.theme-light :deep(.opened-close) {
+  background: rgba(0, 0, 0, 0.02);
+  color: #1f2937;
+}
+
+.theme-light :deep(.opened-close:hover) {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.3);
+  color: #1f2937;
+}
+
+.theme-light .opened-dot.dirty {
+  background: #dc2626;
+}
 </style>

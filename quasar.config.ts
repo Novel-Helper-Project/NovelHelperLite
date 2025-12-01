@@ -13,7 +13,7 @@ export default defineConfig((/* ctx */) => {
     // app boot file (/src/boot)
     // --> boot files are part of "main.js"
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
-    boot: ['pinia'],
+    boot: ['pinia', 'editors'],
 
     bin: {
       windowsAndroidStudio: AndroidStudioPath,
@@ -116,7 +116,7 @@ export default defineConfig((/* ctx */) => {
       // directives: [],
 
       // Quasar plugins
-      plugins: [],
+      plugins: ['Dialog'],
     },
 
     // animations: 'all', // --- includes all animations

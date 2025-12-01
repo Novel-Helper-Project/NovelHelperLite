@@ -15,9 +15,12 @@ const MAX_PERSIST_CONTENT_LENGTH = 400_000; // ~400 KB
 const MAX_PERSIST_STATE_SIZE = 900_000; // ~900 KB JSON length safeguard
 const CONTENT_KEY_PREFIX = 'workspace.content';
 
+let nextFileUid = 1;
+
 export type EditorMode = 'monaco' | 'milkdown';
 
 export type OpenFile = {
+  uid: number; // 唯一标识符,用于 keep-alive 的 key
   path: string;
   name: string;
   content: string;
@@ -26,6 +29,7 @@ export type OpenFile = {
   mime?: string;
   mediaUrl?: string;
   isImage?: boolean;
+  isSettings?: boolean; // 标记为设置页面
   onSave?: (content: string) => Promise<void> | void; // 自定义保存回调
   savedContent?: string;
   imageState?: ImageViewState;
@@ -55,18 +59,18 @@ const state = reactive<WorkspaceState>({
   shellVisible: true,
 });
 
-function upsertAndFocus(file: OpenFile) {
+function upsertAndFocus(file: Omit<OpenFile, 'uid'> & { uid?: number }) {
   const idx = state.openFiles.findIndex((f) => f.path === file.path);
   if (idx >= 0) {
     const existing = state.openFiles[idx];
     if (!existing) return;
     const savedContent = file.savedContent ?? existing.savedContent ?? existing.content;
-    const merged: OpenFile = { ...existing, ...file, savedContent };
+    const merged: OpenFile = { ...existing, ...file, savedContent, uid: existing.uid };
     state.openFiles[idx] = merged;
     state.currentFile = merged;
   } else {
     const savedContent = file.savedContent ?? file.content;
-    const newFile: OpenFile = { ...file, savedContent };
+    const newFile: OpenFile = { uid: nextFileUid++, ...file, savedContent };
     state.openFiles.push(newFile);
     state.currentFile = newFile;
   }
@@ -122,9 +126,21 @@ function closeFile(path: string) {
   const idx = state.openFiles.findIndex((f) => f.path === path);
   if (idx < 0) return;
   const closing = state.openFiles.splice(idx, 1)[0];
+
+  // 如果关闭的是当前文件,需要选择新的当前文件
   if (closing && state.currentFile?.path === closing.path) {
-    state.currentFile = state.openFiles[state.openFiles.length - 1] ?? null;
+    if (state.openFiles.length === 0) {
+      // 没有文件了,设为 null
+      state.currentFile = null;
+    } else if (idx < state.openFiles.length) {
+      // 优先选择右侧的文件(原来 idx 位置的文件)
+      state.currentFile = state.openFiles[idx] ?? null;
+    } else {
+      // 如果关闭的是最后一个,选择新的最后一个
+      state.currentFile = state.openFiles[state.openFiles.length - 1] ?? null;
+    }
   }
+
   schedulePersist();
 }
 
@@ -270,7 +286,7 @@ async function resolveWebFileHandle(fullPath: string): Promise<FileSystemFileHan
   }
 }
 
-async function hydrateOpenFile(file: PersistedOpenFile): Promise<OpenFile> {
+async function hydrateOpenFile(file: PersistedOpenFile): Promise<Omit<OpenFile, 'uid'>> {
   const workspaceId = state.workspaceId;
   let content = file.content ?? '';
   let savedContent = file.savedContent;
@@ -297,7 +313,7 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<OpenFile> {
     }
   }
 
-  const base: OpenFile = {
+  const base: Omit<OpenFile, 'uid'> = {
     path: file.path,
     name: file.name,
     content,
@@ -410,7 +426,8 @@ async function restoreWorkspaceState() {
     if (!persisted) return;
     const hydrated: OpenFile[] = [];
     for (const file of persisted.openFiles) {
-      hydrated.push(await hydrateOpenFile(file));
+      const hydratedFile = await hydrateOpenFile(file);
+      hydrated.push({ uid: nextFileUid++, ...hydratedFile });
     }
     state.openFiles.splice(0, state.openFiles.length, ...hydrated);
     const nextCurrent = persisted.currentFilePath

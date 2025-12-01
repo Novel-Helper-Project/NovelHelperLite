@@ -87,9 +87,7 @@
             />
             <span class="control-value">{{ localSettings.editor.fontSize }}px</span>
           </div>
-          <p class="setting-desc">
-            编辑器文字的显示大小。
-          </p>
+          <p class="setting-desc">编辑器文字的显示大小。</p>
         </div>
         <div class="setting-item">
           <label class="setting-label">字体族列</label>
@@ -101,9 +99,7 @@
               placeholder="Monaco, Consolas, monospace"
             />
           </div>
-          <p class="setting-desc">
-            编辑器使用的字体家族。
-          </p>
+          <p class="setting-desc">编辑器使用的字体家族。</p>
         </div>
         <div class="setting-item">
           <label class="setting-label">制表符大小</label>
@@ -117,9 +113,7 @@
             />
             <span class="control-value">{{ localSettings.editor.tabSize }}</span>
           </div>
-          <p class="setting-desc">
-            制表符对应的空格数量。
-          </p>
+          <p class="setting-desc">制表符对应的空格数量。</p>
         </div>
         <div class="setting-item">
           <label class="setting-label">
@@ -130,9 +124,7 @@
             />
             自动换行
           </label>
-          <p class="setting-desc">
-            超过编辑器宽度的长行是否自动换行显示。
-          </p>
+          <p class="setting-desc">超过编辑器宽度的长行是否自动换行显示。</p>
         </div>
       </div>
 
@@ -142,9 +134,7 @@
           <span class="material-icons">restore</span>
           重置所有设置
         </button>
-        <p class="setting-desc">
-          将所有设置恢复为默认值。此操作不可撤销。
-        </p>
+        <p class="setting-desc">将所有设置恢复为默认值。此操作不可撤销。</p>
       </div>
     </div>
   </div>
@@ -178,14 +168,18 @@ onMounted(() => {
 });
 
 // 监听设置变化并同步到 store
-watch(localSettings.value, (newSettings) => {
-  settingsStore.setImageViewingShowPinchCenter(newSettings.imageViewing.showPinchCenter);
-  settingsStore.setThemeMode(newSettings.theme.mode);
-  settingsStore.setEditorFontSize(newSettings.editor.fontSize);
-  settingsStore.setEditorFontFamily(newSettings.editor.fontFamily);
-  settingsStore.setEditorTabSize(newSettings.editor.tabSize);
-  settingsStore.setEditorWordWrap(newSettings.editor.wordWrap);
-}, { deep: true });
+watch(
+  localSettings.value,
+  (newSettings) => {
+    settingsStore.setImageViewingShowPinchCenter(newSettings.imageViewing.showPinchCenter);
+    settingsStore.setThemeMode(newSettings.theme.mode);
+    settingsStore.setEditorFontSize(newSettings.editor.fontSize);
+    settingsStore.setEditorFontFamily(newSettings.editor.fontFamily);
+    settingsStore.setEditorTabSize(newSettings.editor.tabSize);
+    settingsStore.setEditorWordWrap(newSettings.editor.wordWrap);
+  },
+  { deep: true },
+);
 
 // 设置变更处理函数
 function onShowPinchCenterChange() {
@@ -222,12 +216,12 @@ function resetAllSettings() {
 
 <style scoped>
 .settings-page {
-  height: 100%;
+  width: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--vscode-editor-background);
   color: var(--vscode-editor-foreground);
-  overflow: hidden;
   padding: 16px;
 }
 
@@ -248,7 +242,8 @@ function resetAllSettings() {
 
 .settings-content {
   flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .settings-section {
@@ -294,7 +289,7 @@ function resetAllSettings() {
   color: var(--vscode-editor-foreground);
 }
 
-.setting-label input[type="checkbox"] {
+.setting-label input[type='checkbox'] {
   margin-right: 8px;
 }
 
@@ -322,7 +317,7 @@ function resetAllSettings() {
   padding: 4px 8px;
 }
 
-input[type="text"] {
+input[type='text'] {
   flex: 1;
   font-size: 14px;
   color: var(--vscode-input-foreground);
@@ -333,11 +328,11 @@ input[type="text"] {
   outline: none;
 }
 
-input[type="text"]:focus {
+input[type='text']:focus {
   border-color: var(--vscode-focusBorder);
 }
 
-input[type="range"] {
+input[type='range'] {
   flex: 1;
   height: 4px;
   background: var(--vscode-slider-background);
@@ -346,7 +341,7 @@ input[type="range"] {
   -webkit-appearance: none;
 }
 
-input[type="range"]::-webkit-slider-thumb {
+input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 16px;
@@ -357,7 +352,7 @@ input[type="range"]::-webkit-slider-thumb {
   cursor: pointer;
 }
 
-input[type="range"]::-webkit-slider-thumb:hover {
+input[type='range']::-webkit-slider-thumb:hover {
   background: var(--vscode-button-hoverBackground);
 }
 
@@ -373,7 +368,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   cursor: pointer;
 }
 
-.theme-option input[type="radio"] {
+.theme-option input[type='radio'] {
   margin-right: 6px;
 }
 

@@ -68,6 +68,7 @@ import SearchPanel from './SearchPanel.vue';
 import { useWorkspaceStore } from 'src/stores/workspace';
 import { useSettingsStore } from 'src/stores/settings';
 import { storage } from 'src/services/storage';
+import { useQuasar } from 'quasar';
 
 type SidebarTab = {
   key: string;
@@ -208,6 +209,7 @@ function handleKeyDown(event: KeyboardEvent) {
 
 const { upsertAndFocus } = workspaceStore;
 const settingsStore = useSettingsStore();
+const $q = useQuasar();
 
 // 持久化面板可见性状态
 async function persistSidebarPanelVisibility() {
@@ -266,7 +268,47 @@ function createSaveCallback() {
 }
 
 // 打开设置文件标签页
-async function openSettings() {
+function openSettings() {
+  $q.dialog({
+    title: '打开设置',
+    message: '请选择打开方式:',
+    options: {
+      type: 'radio',
+      model: 'ui',
+      items: [
+        { label: '设置界面 (推荐)', value: 'ui' },
+        { label: '设置 JSON 文件', value: 'json' },
+      ],
+    },
+    cancel: true,
+    persistent: false,
+  }).onOk((selectedOption: string) => {
+    if (selectedOption === 'ui') {
+      // 打开设置标签页
+      openSettingsTab();
+    } else {
+      // 打开设置 JSON 文件
+      void openSettingsJson();
+    }
+  });
+}
+
+function openSettingsTab() {
+  // 创建一个虚拟的设置文件并在标签页中打开
+  const settingsFile = {
+    path: '__settings__',
+    name: '⚙️ 设置',
+    content: '',
+    handle: null,
+    mime: 'application/settings',
+    isImage: false,
+    isSettings: true, // 特殊标记
+  };
+
+  upsertAndFocus(settingsFile);
+}
+
+async function openSettingsJson() {
   try {
     // 从存储层读取设置，如果没有则使用默认设置
     let settingsData = await storage.get<SettingsData>('settings');

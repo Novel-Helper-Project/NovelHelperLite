@@ -1,0 +1,11 @@
+# wrangler.toml
+name = 'novel-helper-lite'
+main = "workers/worker.js"
+compatibility_date = "2025-11-12"
+workers_dev = false
+
+assets = { directory = "dist/spa", binding = "ASSETS" }
+
+[[routes]]
+pattern = "lite-editor.sirrus.cc"
+custom_domain = true

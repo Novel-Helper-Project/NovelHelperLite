@@ -15,6 +15,7 @@ import {
   paragraphSchema,
 } from '@milkdown/kit/preset/commonmark';
 import '@milkdown/crepe/theme/frame-dark.css';
+import '@milkdown/crepe/theme/frame.css';
 
 const props = withDefaults(
   defineProps<{
@@ -186,7 +187,7 @@ onBeforeUnmount(() => {
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: #0f1216;
+  background: var(--vscode-main-bg);
   overflow: hidden;
 }
 
@@ -217,8 +218,16 @@ onBeforeUnmount(() => {
   border-radius: 4px;
 }
 
+.theme-light :deep(.milkdown .ProseMirror::-webkit-scrollbar-thumb) {
+  background: rgba(0, 0, 0, 0.15);
+}
+
 :deep(.milkdown .ProseMirror::-webkit-scrollbar-thumb:hover) {
   background: rgba(255, 255, 255, 0.25);
+}
+
+.theme-light :deep(.milkdown .ProseMirror::-webkit-scrollbar-thumb:hover) {
+  background: rgba(0, 0, 0, 0.25);
 }
 
 :deep(.milkdown .ProseMirror::-webkit-scrollbar-corner) {
@@ -243,6 +252,12 @@ onBeforeUnmount(() => {
   background: #131923;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
   z-index: 20;
+}
+
+.theme-light :deep(.milkdown .milkdown-toolbar) {
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 /* 只有在有选区时才显示 toolbar */
@@ -273,14 +288,29 @@ onBeforeUnmount(() => {
   border-radius: 6px;
 }
 
+.theme-light :deep(.milkdown .milkdown-toolbar .toolbar-item) {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  color: #1f2937;
+}
+
 /* 修复默认图标颜色 */
 :deep(.milkdown .milkdown-toolbar .toolbar-item svg) {
   fill: #e7f0ff;
   color: #e7f0ff;
 }
 
+.theme-light :deep(.milkdown .milkdown-toolbar .toolbar-item svg) {
+  fill: #1f2937;
+  color: #1f2937;
+}
+
 :deep(.milkdown .milkdown-toolbar .toolbar-item svg path) {
   fill: #e7f0ff;
+}
+
+.theme-light :deep(.milkdown .milkdown-toolbar .toolbar-item svg path) {
+  fill: #1f2937;
 }
 
 :deep(.milkdown .milkdown-toolbar .toolbar-item:hover) {
@@ -288,11 +318,20 @@ onBeforeUnmount(() => {
   border-color: #4c5a72;
 }
 
+.theme-light :deep(.milkdown .milkdown-toolbar .toolbar-item:hover) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
 :deep(.milkdown .milkdown-toolbar .divider) {
   width: 1px;
   height: 18px;
   background: #3a4556;
   margin: 0 4px;
+}
+
+.theme-light :deep(.milkdown .milkdown-toolbar .divider) {
+  background: #d1d5db;
 }
 
 :deep(.milkdown .milkdown-slash-menu) {
