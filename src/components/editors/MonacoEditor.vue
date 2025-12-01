@@ -283,6 +283,10 @@ onMounted(() => {
     language,
     theme: monacoTheme,
     automaticLayout: true,
+    wordWrap: settingsStore.editor.wordWrap ? 'on' : 'off',
+    fontSize: settingsStore.editor.fontSize,
+    fontFamily: settingsStore.editor.fontFamily,
+    tabSize: settingsStore.editor.tabSize,
   });
 
   // 注册剪贴板命令
@@ -314,6 +318,31 @@ onMounted(() => {
     () => settingsStore.isDarkMode,
     (isDark) => {
       monaco.editor.setTheme(isDark ? 'vs-dark' : 'vs');
+    },
+  );
+
+  // 监听换行设置
+  watch(
+    () => settingsStore.editor.wordWrap,
+    (wrap) => {
+      editor?.updateOptions({ wordWrap: wrap ? 'on' : 'off' });
+    },
+    { immediate: false },
+  );
+
+  // 监听字号/字体/Tab 大小设置
+  watch(
+    () => [
+      settingsStore.editor.fontSize,
+      settingsStore.editor.fontFamily,
+      settingsStore.editor.tabSize,
+    ],
+    ([fontSize, fontFamily, tabSize]) => {
+      editor?.updateOptions({
+        ...(typeof fontSize === 'number' ? { fontSize } : {}),
+        ...(typeof fontFamily === 'string' ? { fontFamily } : {}),
+        ...(typeof tabSize === 'number' ? { tabSize } : {}),
+      });
     },
   );
 

@@ -241,6 +241,9 @@ function replacePathBase(path: string | undefined, oldBase: string, newBase: str
 
 const explorerData = ref<ExplorerNode[]>([]);
 const explorerExpanded = ref(true);
+const currentRootEntry = ref<FsEntry | null>(null);
+const stopWatcher = ref<(() => void) | null>(null);
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 const isCapacitor = Fs.getPlatform() === 'capacitor';
 
@@ -338,6 +341,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('click', globalListeners.click);
   window.removeEventListener('contextmenu', globalListeners.contextmenu);
+  stopFileWatcher();
 });
 
 const fileIconMap: Record<string, string> = {
@@ -545,6 +549,8 @@ async function restoreLastWorkspace() {
     expandedKeys.value = [rootKey];
     selectedKeys.value = [];
     contextMenu.node = null;
+    currentRootEntry.value = rootEntry;
+    await restartWatcher();
     await switchWorkspace(rootKey, normalizedPath, rootEntry.capDirectory);
   } catch (error) {
     console.warn('恢复最近打开的文件夹失败', error);
@@ -651,6 +657,67 @@ function isDescendant(rootKey: string, maybeChildKey: string) {
   const rootNode = findNode(explorerData.value, rootKey);
   if (!rootNode?.children) return false;
   return containsKey(rootNode.children, maybeChildKey);
+}
+
+async function restartWatcher() {
+  stopFileWatcher();
+  if (Fs.getPlatform() !== 'node') return;
+  const root = currentRootEntry.value;
+  if (!root?.path) return;
+  try {
+    const fs = await import('node:fs');
+    const watcher = fs.watch(root.path, { recursive: true }, () => {
+      scheduleRefresh();
+    });
+    stopWatcher.value = () => watcher.close();
+  } catch (err) {
+    console.warn('文件监听失败', err);
+  }
+}
+
+function stopFileWatcher() {
+  if (stopWatcher.value) {
+    stopWatcher.value();
+    stopWatcher.value = null;
+  }
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+function scheduleRefresh() {
+  if (refreshTimer) return;
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    void refreshExplorerTree();
+  }, 200);
+}
+
+async function refreshExplorerTree() {
+  const root = currentRootEntry.value;
+  if (!root) return;
+  try {
+    const treeEntries = await Fs.buildTree(root);
+    const rootKey = root.path?.trim() || root.name || 'workspace';
+    const prevExpanded = [...expandedKeys.value];
+    const prevSelected = [...selectedKeys.value];
+    explorerData.value = [
+      {
+        key: rootKey,
+        label: root.name || '工作区',
+        type: 'folder',
+        path: root.path ?? rootKey,
+        fsEntry: root,
+        children: convertFsTreeToExplorer(treeEntries, rootKey),
+        ...(root.webHandle ? { handle: root.webHandle as FileSystemDirectoryHandle } : {}),
+      },
+    ];
+    expandedKeys.value = prevExpanded.filter((k) => containsKey(explorerData.value, k));
+    selectedKeys.value = prevSelected.filter((k) => containsKey(explorerData.value, k));
+  } catch (e) {
+    console.warn('刷新文件树失败', e);
+  }
 }
 
 async function handleDrop(info: TreeDropInfo) {
@@ -855,6 +922,8 @@ async function pickWorkspace() {
       expandedKeys.value = [rootNode.key];
       selectedKeys.value = [];
       contextMenu.node = null;
+      currentRootEntry.value = rootEntry;
+      await restartWatcher();
       await persistLastWorkspace(rootEntry);
       await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key, rootEntry.capDirectory);
       return;
@@ -924,6 +993,8 @@ async function pickWorkspace() {
     expandedKeys.value = [rootNode.key];
     selectedKeys.value = [];
     contextMenu.node = null;
+    currentRootEntry.value = rootEntry;
+    await restartWatcher();
     await persistLastWorkspace(rootEntry);
     await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key, rootEntry.capDirectory);
   } catch (error) {
@@ -963,6 +1034,8 @@ async function openPrivateWorkspace() {
     expandedKeys.value = [rootNode.key];
     selectedKeys.value = [];
     contextMenu.node = null;
+    currentRootEntry.value = rootEntry;
+    await restartWatcher();
     await persistLastWorkspace(rootEntry);
     await switchWorkspace(rootNode.key, rootEntry.path ?? rootNode.key, rootEntry.capDirectory);
   } catch (error) {
