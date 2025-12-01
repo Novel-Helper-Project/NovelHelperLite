@@ -103,6 +103,44 @@ body {
   color: var(--vscode-text);
 }
 
+.q-dialog__backdrop {
+  background: transparent;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Naive UI dropdown (右键菜单) 主题适配 */
+:root .n-dropdown,
+.theme-dark .n-dropdown {
+  --n-color: var(--vscode-editor-background);
+  --n-option-text-color: var(--vscode-text);
+  --n-option-text-color-hover: var(--vscode-text);
+  --n-option-text-color-active: var(--vscode-text);
+  --n-option-text-color-pressed: var(--vscode-text);
+  --n-option-text-color-child-active: var(--vscode-text);
+  --n-option-color-hover: rgba(77, 171, 247, 0.12);
+  --n-option-color-active: rgba(77, 171, 247, 0.16);
+  --n-option-color-pressed: rgba(77, 171, 247, 0.2);
+  --n-option-divider-color: var(--vscode-border);
+  --n-box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  --n-option-check-mark-color: var(--vscode-accent);
+}
+
+.theme-light .n-dropdown {
+  --n-color: var(--vscode-main-bg);
+  --n-option-text-color: var(--vscode-text);
+  --n-option-text-color-hover: var(--vscode-text);
+  --n-option-text-color-active: var(--vscode-text);
+  --n-option-text-color-pressed: var(--vscode-text);
+  --n-option-text-color-child-active: var(--vscode-text);
+  --n-option-color-hover: rgba(37, 99, 235, 0.08);
+  --n-option-color-active: rgba(37, 99, 235, 0.12);
+  --n-option-color-pressed: rgba(37, 99, 235, 0.16);
+  --n-option-divider-color: var(--vscode-border);
+  --n-box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  --n-option-check-mark-color: var(--vscode-accent);
+}
+
 .q-dialog__title {
   color: var(--vscode-text);
 }
