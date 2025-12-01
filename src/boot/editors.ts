@@ -7,6 +7,8 @@ import SettingsEditor from 'src/components/editors/SettingsEditor.vue';
 import MilkdownEditorWrapper from 'src/components/editors/MilkdownEditorWrapper.vue';
 import { saveFile } from 'src/services/fileSaver';
 import { useWorkspaceStore } from 'src/stores/workspace';
+import { invokeEditorCommand } from 'src/services/editorCommands';
+import { Notify } from 'quasar';
 
 /**
  * 设置编辑器提供器
@@ -142,6 +144,63 @@ const monacoEditorProvider: EditorProvider = {
   ],
   priority: 10, // 默认编辑器,最低优先级
   toolbarActions: [
+    {
+      id: 'cut',
+      icon: 'content_cut',
+      title: '剪切 (Ctrl+X)',
+      order: 10,
+      onClick: async (file) => {
+        const result = await invokeEditorCommand(file.path, 'cut');
+        if (!result.ok) {
+          console.warn('[MonacoEditor][cut] failed', result);
+          const caption = result.reason;
+          Notify.create({
+            type: 'warning',
+            message: '剪切失败,请使用键盘快捷键 Ctrl+X',
+            ...(caption ? { caption } : {}),
+            timeout: 4000,
+          });
+        }
+      },
+    },
+    {
+      id: 'copy',
+      icon: 'content_copy',
+      title: '复制 (Ctrl+C)',
+      order: 20,
+      onClick: async (file) => {
+        const result = await invokeEditorCommand(file.path, 'copy');
+        if (!result.ok) {
+          console.warn('[MonacoEditor][copy] failed', result);
+          const caption = result.reason;
+          Notify.create({
+            type: 'warning',
+            message: '复制失败,请使用键盘快捷键 Ctrl+C',
+            ...(caption ? { caption } : {}),
+            timeout: 4000,
+          });
+        }
+      },
+    },
+    {
+      id: 'paste',
+      icon: 'content_paste',
+      title: '粘贴 (Ctrl+V)',
+      order: 30,
+      onClick: async (file) => {
+        const result = await invokeEditorCommand(file.path, 'paste');
+        if (!result.ok) {
+          console.warn('[MonacoEditor][paste] failed', result);
+          const caption = result.reason;
+          Notify.create({
+            type: 'warning',
+            message: '粘贴失败,请使用键盘快捷键 Ctrl+V',
+            ...(caption ? { caption } : {}),
+            timeout: 4000,
+          });
+        }
+      },
+    },
     {
       id: 'save',
       icon: 'save',

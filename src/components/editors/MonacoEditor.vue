@@ -23,6 +23,7 @@ import * as monaco from 'monaco-editor';
 import type { OpenFile } from 'src/stores/workspace';
 import type { EditorViewState } from 'src/types/editorState';
 import { useSettingsStore } from 'src/stores/settings';
+import { registerEditorCommands, unregisterEditorCommands } from 'src/services/editorCommands';
 
 const props = defineProps<{
   file: OpenFile;
@@ -36,6 +37,7 @@ const emit = defineEmits<{
 const editorEl = ref<HTMLDivElement | null>(null);
 const settingsStore = useSettingsStore();
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
+let registeredCommandPath: string | null = null;
 
 const monacoTheme = settingsStore.isDarkMode ? 'vs-dark' : 'vs';
 
@@ -214,6 +216,43 @@ function onGlobalTouchEnd() {
   window.removeEventListener('touchend', onGlobalTouchEnd);
 }
 
+function registerCommandsForFile(file: OpenFile) {
+  if (!file.path || !editor) return;
+  if (registeredCommandPath && registeredCommandPath !== file.path) {
+    unregisterEditorCommands(registeredCommandPath);
+    registeredCommandPath = null;
+  }
+
+  registerEditorCommands(file.path, {
+    cut: () => {
+      editor?.trigger('toolbar', 'editor.action.clipboardCutAction', null);
+    },
+    copy: () => {
+      editor?.trigger('toolbar', 'editor.action.clipboardCopyAction', null);
+    },
+    paste: () => {
+      if (!editor) return;
+
+      try {
+        editor.trigger('toolbar', 'editor.action.clipboardPasteAction', {
+          pasteOnNewLine: false,
+        });
+      } catch (err) {
+        const rawMessage = err instanceof Error ? err.message : String(err ?? '未知错误');
+
+        if (rawMessage.includes("unknown service 'productService'")) {
+          throw new Error(
+            'Monaco 内部粘贴服务在当前运行环境不可用,这是一个已知限制。请改用键盘快捷键 Ctrl+V 进行粘贴。',
+          );
+        }
+
+        throw new Error(`Monaco 粘贴命令失败: ${rawMessage}`);
+      }
+    },
+  });
+  registeredCommandPath = file.path;
+}
+
 onMounted(() => {
   if (!editorEl.value) return;
 
@@ -227,6 +266,9 @@ onMounted(() => {
     theme: monacoTheme,
     automaticLayout: true,
   });
+
+  // 注册剪贴板命令
+  registerCommandsForFile(props.file);
 
   // 恢复视图状态
   if (props.file.viewState) {
@@ -283,12 +325,21 @@ onMounted(() => {
       if (newFile.viewState) {
         editor.restoreViewState(newFile.viewState as unknown as monaco.editor.ICodeEditorViewState);
       }
+
+      // 重新注册此文件的剪贴板命令
+      registerCommandsForFile(newFile);
     },
     { deep: false },
   );
 });
 
 onBeforeUnmount(() => {
+  // 清理剪贴板命令注册
+  if (registeredCommandPath) {
+    unregisterEditorCommands(registeredCommandPath);
+    registeredCommandPath = null;
+  }
+
   // 清理选择手柄的全局事件监听器
   window.removeEventListener('touchmove', onGlobalTouchMove);
   window.removeEventListener('touchend', onGlobalTouchEnd);
