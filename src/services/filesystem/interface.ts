@@ -18,6 +18,12 @@ export interface FilesystemInterface {
   writeText(targetDir: FsEntry, name: string, content: string): Promise<FsEntry>;
   mkdir(targetDir: FsEntry, name: string): Promise<FsEntry>;
   remove(entry: FsEntry, parent?: FsEntry): Promise<void>;
+  copy(entry: FsEntry, targetDir: FsEntry, options?: { newName?: string }): Promise<FsEntry>;
+  move(
+    entry: FsEntry,
+    targetDir: FsEntry,
+    options?: { newName?: string; sourceParent?: FsEntry },
+  ): Promise<FsEntry>;
   buildTree(dir: FsEntry): Promise<Array<FsEntry & { children?: FsEntry[] }>>;
   getPrivateWorkspaceRoot?(): Promise<FsEntry>;
   checkFileSystemSupport(): {

@@ -52,7 +52,12 @@
       <!-- 欢迎页面 -->
       <div v-if="!workspace.currentFile" class="welcome">
         <div class="welcome-title">欢迎使用 Novel Helper Lite</div>
-        <div class="welcome-subtitle">在左侧选择文件或打开文件夹以开始</div>
+        <div class="welcome-subtitle">
+          在左侧选择文件或打开文件夹以开始 <br />
+          Novel Helper Lite 是 Novel
+          Helper(ANH)的姊妹项目，提供跨平台轻量化，模块化，本地化的小说和文本编辑器<br />Lite项目和ANH项目均由同一团队维护，致力于为用户提供最佳的阅读和写作体验。<br />如果需要更全面的功能，请使用
+          Novel Helper (ANH)。ANH是一个Vscode扩展，提供更丰富的功能和更强大的编辑体验。<br />官网：https://anh.sirrus.cc
+        </div>
         <div class="welcome-hint">支持文本编辑、图片预览、多标签</div>
       </div>
 

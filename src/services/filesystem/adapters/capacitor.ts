@@ -353,6 +353,64 @@ export async function remove(entry: FsEntry): Promise<void> {
   }
 }
 
+export async function copy(
+  entry: FsEntry,
+  targetDir: FsEntry,
+  options?: { newName?: string },
+): Promise<FsEntry> {
+  const destName = options?.newName || entry.name;
+  const sourceDir = entry.capDirectory ?? Directory.Documents;
+  const targetDirectory = targetDir.capDirectory ?? sourceDir;
+  const toPath = joinPath(targetDir.path ?? '', destName);
+  const fromPath = entry.path ?? '';
+
+  if (sourceDir === targetDirectory) {
+    await Filesystem.copy({ from: fromPath, to: toPath, directory: targetDirectory });
+    return { kind: entry.kind, name: destName, path: toPath, capDirectory: targetDirectory };
+  }
+
+  if (entry.kind === 'directory') {
+    await Filesystem.mkdir({ path: toPath, directory: targetDirectory, recursive: true });
+    const children = await list(entry);
+    for (const child of children) {
+      await copy(child, { kind: 'directory', name: destName, path: toPath, capDirectory: targetDirectory });
+    }
+    return { kind: 'directory', name: destName, path: toPath, capDirectory: targetDirectory };
+  }
+
+  const { data } = await Filesystem.readFile({ path: fromPath, directory: sourceDir });
+  const base64 = typeof data === 'string' ? data : await data.text();
+  await Filesystem.writeFile({
+    path: toPath,
+    data: base64,
+    directory: targetDirectory,
+    recursive: true,
+  });
+
+  return { kind: 'file', name: destName, path: toPath, capDirectory: targetDirectory };
+}
+
+export async function move(
+  entry: FsEntry,
+  targetDir: FsEntry,
+  options?: { newName?: string; sourceParent?: FsEntry },
+): Promise<FsEntry> {
+  const destName = options?.newName || entry.name;
+  const sourceDir = entry.capDirectory ?? Directory.Documents;
+  const targetDirectory = targetDir.capDirectory ?? sourceDir;
+  const fromPath = entry.path ?? '';
+  const toPath = joinPath(targetDir.path ?? '', destName);
+
+  if (sourceDir === targetDirectory) {
+    await Filesystem.rename({ from: fromPath, to: toPath, directory: targetDirectory });
+    return { kind: entry.kind, name: destName, path: toPath, capDirectory: targetDirectory };
+  }
+
+  const copied = await copy(entry, targetDir, { newName: destName });
+  await remove(entry);
+  return copied;
+}
+
 export async function buildTree(dir: FsEntry): Promise<Array<FsEntry & { children?: FsEntry[] }>> {
   const rootChildren = await list(dir);
   const result: Array<FsEntry & { children?: FsEntry[] }> = [];

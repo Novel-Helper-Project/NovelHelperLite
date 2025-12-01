@@ -61,6 +61,22 @@ class UnifiedFilesystem implements FilesystemInterface {
     if (p === 'node') return NodeAdapter.remove(entry);
     return CapAdapter.remove(entry);
   }
+  async copy(entry: FsEntry, targetDir: FsEntry, options?: { newName?: string }): Promise<FsEntry> {
+    const p = this.getPlatform();
+    if (p === 'web') return await WebAdapter.copy(entry, targetDir, options);
+    if (p === 'node') return await NodeAdapter.copy(entry, targetDir, options);
+    return await CapAdapter.copy(entry, targetDir, options);
+  }
+  async move(
+    entry: FsEntry,
+    targetDir: FsEntry,
+    options?: { newName?: string; sourceParent?: FsEntry },
+  ): Promise<FsEntry> {
+    const p = this.getPlatform();
+    if (p === 'web') return await WebAdapter.move(entry, targetDir, options);
+    if (p === 'node') return await NodeAdapter.move(entry, targetDir, options);
+    return await CapAdapter.move(entry, targetDir, options);
+  }
   async getPrivateWorkspaceRoot(): Promise<FsEntry> {
     if (this.getPlatform() !== 'capacitor') {
       throw new Error('私有工作区仅在移动端可用');
@@ -109,6 +125,13 @@ const Fs = {
     filesystem.writeText(targetDir, name, content),
   mkdir: (targetDir: FsEntry, name: string) => filesystem.mkdir(targetDir, name),
   remove: (entry: FsEntry, parent?: FsEntry) => filesystem.remove(entry, parent),
+  copy: (entry: FsEntry, targetDir: FsEntry, options?: { newName?: string }) =>
+    filesystem.copy(entry, targetDir, options),
+  move: (
+    entry: FsEntry,
+    targetDir: FsEntry,
+    options?: { newName?: string; sourceParent?: FsEntry },
+  ) => filesystem.move(entry, targetDir, options),
   buildTree: (dir: FsEntry) => filesystem.buildTree(dir),
   getPrivateWorkspaceRoot: () => filesystem.getPrivateWorkspaceRoot(),
   checkFileSystemSupport: () => filesystem.checkFileSystemSupport(),

@@ -73,6 +73,39 @@
       @update:show="contextMenu.show = $event"
     />
 
+    <q-dialog v-model="propertyDialog.show" persistent>
+      <q-card class="prop-card">
+        <q-card-section class="prop-header row items-center">
+          <div class="text-h6">属性</div>
+          <q-space />
+          <q-btn dense round flat icon="close" @click="propertyDialog.show = false" />
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="prop-body">
+          <div class="prop-row">
+            <span class="prop-label">名称</span>
+            <span class="prop-value">{{ propertyDialog.name }}</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">类型</span>
+            <span class="prop-value">{{ propertyDialog.type }}</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">路径</span>
+            <span class="prop-value prop-path">{{ propertyDialog.path }}</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">大小</span>
+            <span class="prop-value">{{ propertyDialog.size }}</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">修改时间</span>
+            <span class="prop-value">{{ propertyDialog.modified }}</span>
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+
     <div class="explorer-trees">
       <TreePanel
         v-if="openFiles.length"
@@ -117,6 +150,7 @@
             :selected-keys="selectedKeys"
             :allow-drop="allowDrop"
             :render-prefix="renderPrefix"
+            :node-props="nodeProps"
             :style="{ minHeight: '100%' }"
             @update:expanded-keys="expandedKeys = $event"
             @update:selected-keys="handleSelect"
@@ -130,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, reactive, ref, onMounted } from 'vue';
+import { computed, h, reactive, ref, onMounted, onBeforeUnmount } from 'vue';
 
 // 添加 Capacitor 全局类型声明
 declare global {
@@ -165,6 +199,46 @@ type ExplorerNode = TreeOption & {
   fsEntry?: FsEntry;
 };
 
+type ClipboardItem = {
+  entry: FsEntry;
+  type: ExplorerNode['type'];
+  name: string;
+  path?: string;
+  mode: 'copy' | 'cut';
+  parentKey?: string;
+  parentEntry?: FsEntry;
+};
+
+function normalizeSeparator(value: string, separator: '/' | '\\') {
+  if (separator === '\\') return value.replace(/\//g, '\\');
+  return value.replace(/\\/g, '/');
+}
+
+function joinPaths(base: string | undefined, name: string) {
+  if (!base) return name;
+  const separator: '/' | '\\' = base.includes('\\') ? '\\' : '/';
+  const cleanedBase = base.replace(/[\\/]+$/u, '');
+  const cleanedName = name.replace(/^[\\/]+/u, '');
+  return normalizeSeparator(`${cleanedBase}${separator}${cleanedName}`, separator);
+}
+
+function replacePathBase(path: string | undefined, oldBase: string, newBase: string): string | undefined {
+  if (!path) return path;
+  const separator: '/' | '\\' = path.includes('\\') ? '\\' : '/';
+  const normalizedPath = path.replace(/\\/g, '/');
+  const normalizedOld = oldBase.replace(/\\/g, '/');
+  const normalizedNew = newBase.replace(/\\/g, '/');
+
+  if (normalizedPath === normalizedOld) {
+    return normalizeSeparator(normalizedNew, separator);
+  }
+  if (normalizedPath.startsWith(`${normalizedOld}/`)) {
+    const rest = normalizedPath.slice(normalizedOld.length);
+    return normalizeSeparator(`${normalizedNew}${rest}`, separator);
+  }
+  return path;
+}
+
 const explorerData = ref<ExplorerNode[]>([]);
 const explorerExpanded = ref(true);
 
@@ -182,6 +256,31 @@ const contextMenu = reactive({
   y: 0,
   node: null as ExplorerNode | null,
 });
+const clipboard = reactive<{ item: ClipboardItem | null }>({
+  item: null,
+});
+const propertyDialog = reactive({
+  show: false,
+  name: '',
+  type: '',
+  path: '',
+  size: '-',
+  modified: '-',
+});
+const globalListeners = {
+  click: (e: MouseEvent) => {
+    if (!contextMenu.show) return;
+    const target = e.target as HTMLElement | null;
+    if (target && target.closest('.n-dropdown')) return;
+    contextMenu.show = false;
+  },
+  contextmenu: (e: MouseEvent) => {
+    if (!contextMenu.show) return;
+    const target = e.target as HTMLElement | null;
+    if (target && target.closest('.n-dropdown')) return;
+    contextMenu.show = false;
+  },
+};
 
 const {
   state: workspace,
@@ -192,17 +291,33 @@ const {
   closeFile,
 } = useWorkspaceStore();
 
-const contextMenuOptions = computed(() => [
-  { label: '新建文件', key: 'new-file' },
-  { label: '新建文件夹', key: 'new-folder' },
-  { label: '重命名', key: 'rename', disabled: !contextMenu.node },
-  { label: '删除', key: 'delete', disabled: !contextMenu.node },
-]);
+const contextMenuOptions = computed(() => {
+  const node = contextMenu.node;
+  const pasteTarget =
+    node?.type === 'folder'
+      ? node
+      : node
+        ? findParentNode(node.key)
+        : explorerData.value[0] ?? null;
+  const hasClipboard = !!clipboard.item;
+
+  return [
+    { label: '新建文件', key: 'new-file' },
+    { label: '新建文件夹', key: 'new-folder' },
+    { label: '剪切', key: 'cut', disabled: !node },
+    { label: '复制', key: 'copy', disabled: !node },
+    { label: '粘贴', key: 'paste', disabled: !hasClipboard || !pasteTarget },
+    { label: '重命名', key: 'rename', disabled: !node },
+    { label: '删除', key: 'delete', disabled: !node },
+    { label: '属性', key: 'info', disabled: !node },
+  ];
+});
 
 const openFiles = computed(() => workspace.openFiles);
 const openedExpanded = ref(true);
 const openedSelected = computed(() => (workspace.currentFile ? [workspace.currentFile.path] : []));
 const openedHeight = ref(220);
+const longPressTimer = ref<number | null>(null);
 const MIN_OPENED_HEIGHT = 80;
 const MAX_OPENED_HEIGHT = 400;
 const openedTreeData = computed<TreeOption[]>(() =>
@@ -216,12 +331,76 @@ const openedTreeData = computed<TreeOption[]>(() =>
 
 onMounted(() => {
   void restoreLastWorkspace();
+  window.addEventListener('click', globalListeners.click);
+  window.addEventListener('contextmenu', globalListeners.contextmenu);
 });
+
+onBeforeUnmount(() => {
+  window.removeEventListener('click', globalListeners.click);
+  window.removeEventListener('contextmenu', globalListeners.contextmenu);
+});
+
+const fileIconMap: Record<string, string> = {
+  md: 'description',
+  markdown: 'description',
+  txt: 'article',
+  json: 'data_object',
+  yml: 'data_object',
+  yaml: 'data_object',
+  ts: 'code',
+  tsx: 'code',
+  js: 'javascript',
+  jsx: 'javascript',
+  vue: 'filter_none',
+  html: 'language',
+  css: 'palette',
+  scss: 'palette',
+  less: 'palette',
+  png: 'image',
+  jpg: 'image',
+  jpeg: 'image',
+  gif: 'image',
+  webp: 'image',
+  svg: 'image',
+  mp4: 'movie',
+  mp3: 'music_note',
+  wav: 'music_note',
+  flac: 'music_note',
+  pdf: 'picture_as_pdf',
+  zip: 'folder_zip',
+  rar: 'folder_zip',
+  '7z': 'folder_zip',
+  exe: 'memory',
+  dll: 'memory',
+  obj: 'architecture',
+  cpp: 'code',
+  h: 'code',
+  hpp: 'code',
+  c: 'code',
+  rs: 'code',
+  go: 'code',
+  py: 'code',
+  sh: 'terminal',
+  bat: 'terminal',
+  ps1: 'terminal',
+};
+
+function pickIcon(node: ExplorerNode) {
+  if (node.type === 'folder') {
+    return expandedKeys.value.includes(node.key) ? 'folder_open' : 'folder';
+  }
+  const label = node.label || '';
+  const match = /\.([^.]+)$/.exec(label);
+  if (match) {
+    const ext = match[1]?.toLowerCase();
+    if (ext && fileIconMap[ext]) return fileIconMap[ext];
+  }
+  return 'insert_drive_file';
+}
 
 function renderPrefix({ option }: { option: TreeOption }) {
   const node = option as ExplorerNode;
-  const iconName = node.type === 'folder' ? 'folder' : 'insert_drive_file';
-  return h('span', { class: 'material-icons tree-icon' }, iconName);
+  return h('span', { class: 'material-icons tree-icon' }, pickIcon(node));
 }
 
 function isDirty(file: OpenFile) {
@@ -273,6 +452,36 @@ function allowDrop(info: AllowDropInfo) {
     return node.type === 'folder';
   }
   return true;
+}
+
+function clearLongPressTimer() {
+  if (longPressTimer.value) {
+    window.clearTimeout(longPressTimer.value);
+    longPressTimer.value = null;
+  }
+}
+
+function handlePressStart(node: ExplorerNode, e: PointerEvent) {
+  clearLongPressTimer();
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  longPressTimer.value = window.setTimeout(() => {
+    handleContextMenu(node, e as unknown as MouseEvent);
+  }, 600);
+}
+
+function nodeProps({ option }: { option: TreeOption }) {
+  const node = option as ExplorerNode;
+  return {
+    onPointerdown: (e: PointerEvent) => handlePressStart(node, e),
+    onPointerup: clearLongPressTimer,
+    onPointerleave: clearLongPressTimer,
+    onPointercancel: clearLongPressTimer,
+    onContextmenu: (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleContextMenu(node, e);
+    },
+  };
 }
 
 async function restoreLastWorkspace() {
@@ -354,6 +563,7 @@ async function ensureDirectoryPermission(handle: FileSystemDirectoryHandle) {
 }
 
 function handleContextMenu(payload: unknown, maybeEvent?: MouseEvent) {
+  clearLongPressTimer();
   const info = normalizeContextPayload(payload, maybeEvent);
   if (!info) return;
 
@@ -443,31 +653,81 @@ function isDescendant(rootKey: string, maybeChildKey: string) {
   return containsKey(rootNode.children, maybeChildKey);
 }
 
-function handleDrop(info: TreeDropInfo) {
+async function handleDrop(info: TreeDropInfo) {
   const node = info.node as ExplorerNode;
   const dragNode = info.dragNode as ExplorerNode | undefined;
 
   if (!dragNode || dragNode.key === node.key) return;
-  if (isDescendant(dragNode.key, node.key)) return;
+  if (info.dropPosition === 'inside' && isDescendant(dragNode.key, node.key)) return;
+  if (!dragNode.fsEntry) return;
 
-  const removed = extractNode(dragNode.key);
-  if (!removed) return;
-
-  if (info.dropPosition === 'inside') {
-    const target = findNode(explorerData.value, node.key);
-    if (!target) return;
-    ensureChildren(target).push(removed.node);
-    if (!expandedKeys.value.includes(target.key)) {
-      expandedKeys.value.push(target.key);
-    }
+  const sourceParentNode = findParentNode(dragNode.key);
+  const sourceParentFs = sourceParentNode?.fsEntry;
+  if (!sourceParentFs) {
+    window.alert('无法移动根目录');
     return;
   }
 
-  const parentList = findParentList(node.key);
-  if (!parentList) return;
-  const targetIndex = parentList.findIndex((item) => item.key === node.key);
-  const insertIndex = info.dropPosition === 'before' ? targetIndex : targetIndex + 1;
-  parentList.splice(insertIndex, 0, removed.node);
+  const targetDirNode =
+    info.dropPosition === 'inside' ? node : findParentNode(node.key) ?? null;
+  if (!targetDirNode || targetDirNode.type !== 'folder' || !targetDirNode.fsEntry) {
+    window.alert('无效的目标位置');
+    return;
+  }
+  const targetFs = targetDirNode.fsEntry;
+
+  const name = validatePasteName(targetDirNode, dragNode.label, dragNode.key);
+  if (!name) return;
+
+  try {
+    const sameDirectory =
+      !!sourceParentFs &&
+      !!targetFs &&
+      (sourceParentFs === targetFs ||
+        (sourceParentFs.path &&
+          targetFs.path &&
+          normalizePathForCompare(sourceParentFs.path) === normalizePathForCompare(targetFs.path)));
+    const sameName = dragNode.label === name;
+    const moveOptions =
+      sourceParentFs ? { newName: name, sourceParent: sourceParentFs } : { newName: name };
+    const moved =
+      sameDirectory && sameName
+        ? dragNode.fsEntry
+        : await Fs.move(dragNode.fsEntry, targetFs, moveOptions);
+    const newPath =
+      moved.path ??
+      dragNode.path ??
+      joinPaths(targetDirNode.path ?? targetDirNode.label, name);
+    const removed = extractNode(dragNode.key);
+    const movingNode = removed?.node ?? null;
+    if (!movingNode) return;
+    rebaseNodePaths(movingNode, dragNode.key, newPath, moved, name);
+
+    const parentList =
+      info.dropPosition === 'inside'
+        ? ensureChildren(targetDirNode)
+        : findParentList(node.key) ?? ensureChildren(targetDirNode);
+    if (!parentList) return;
+
+    let insertIndex = parentList.length;
+    if (info.dropPosition === 'before' || info.dropPosition === 'after') {
+      const targetIndex = parentList.findIndex((item) => item.key === node.key);
+      if (targetIndex >= 0) {
+        insertIndex = info.dropPosition === 'before' ? targetIndex : targetIndex + 1;
+      }
+    }
+    parentList.splice(insertIndex, 0, movingNode);
+    remapKeyList(expandedKeys.value, dragNode.key, newPath);
+    remapKeyList(selectedKeys.value, dragNode.key, newPath);
+    updateOpenFilesAfterMove(dragNode.key, newPath, movingNode.type);
+    if (info.dropPosition === 'inside' && !expandedKeys.value.includes(targetDirNode.key)) {
+      expandedKeys.value.push(targetDirNode.key);
+    }
+    selectedKeys.value = [movingNode.key];
+  } catch (e) {
+    console.error('拖拽移动失败', e);
+    window.alert('移动失败: ' + (e as Error).message);
+  }
 }
 
 async function createSiblingOrChild(type: ExplorerNode['type']) {
@@ -475,11 +735,16 @@ async function createSiblingOrChild(type: ExplorerNode['type']) {
   if (!target) return;
 
   const name = window.prompt(type === 'file' ? '新文件名称' : '新文件夹名称');
-  if (!name) return;
+  const trimmedName = name?.trim();
+  if (!trimmedName) return;
 
   const parentDirNode =
     target.type === 'folder' ? target : (findParentNode(target.key) ?? explorerData.value[0]);
   if (!parentDirNode) return;
+  if (hasNameConflict(parentDirNode, trimmedName)) {
+    window.alert('同级已存在同名项目');
+    return;
+  }
   const parentList = ensureChildren(parentDirNode);
 
   try {
@@ -487,19 +752,19 @@ async function createSiblingOrChild(type: ExplorerNode['type']) {
     if (type === 'folder') {
       const dirFs = parentDirNode.fsEntry;
       if (!dirFs || dirFs.kind !== 'directory') throw new Error('缺少目标目录');
-      created = await Fs.mkdir(dirFs, name);
+      created = await Fs.mkdir(dirFs, trimmedName);
     } else {
       const dirFs = parentDirNode.fsEntry;
       if (!dirFs || dirFs.kind !== 'directory') throw new Error('缺少目标目录');
-      created = await Fs.writeText(dirFs, name, '');
+      created = await Fs.writeText(dirFs, trimmedName, '');
     }
 
-    const newPath = `${parentDirNode.path ?? parentDirNode.label}/${name}`;
+    const newPath = created.path ?? joinPaths(parentDirNode.path ?? parentDirNode.label, trimmedName);
     const newNode: ExplorerNode =
       type === 'folder'
         ? {
             key: newPath,
-            label: name,
+            label: trimmedName,
             type,
             children: [],
             ...(created.webHandle
@@ -510,7 +775,7 @@ async function createSiblingOrChild(type: ExplorerNode['type']) {
           }
         : {
             key: newPath,
-            label: name,
+            label: trimmedName,
             type,
             ...(created.webHandle ? { handle: created.webHandle as FileSystemFileHandle } : {}),
             path: newPath,
@@ -539,6 +804,10 @@ function findParentNode(
     if (nested) return nested;
   }
   return null;
+}
+
+function hasNameConflict(parent: ExplorerNode, name: string, excludeKey?: string) {
+  return (parent.children ?? []).some((c) => c.label === name && c.key !== excludeKey);
 }
 
 function ensureChildren(node: ExplorerNode) {
@@ -862,13 +1131,39 @@ async function openFile(node: ExplorerNode) {
   }
 }
 
-function renameNode(target: ExplorerNode) {
-  const name = window.prompt('重命名', target.label);
-  if (!name) return;
-  target.label = name;
+async function renameNode(target: ExplorerNode) {
+  if (!target.fsEntry) return;
+  const parent = findParentNode(target.key);
+  const parentFs = parent?.fsEntry;
+  if (!parentFs || parentFs.kind !== 'directory') {
+    window.alert('无法重命名根目录');
+    return;
+  }
+  const name = window.prompt('重命名', target.label)?.trim();
+  if (!name || name === target.label) return;
+  if (hasNameConflict(parent, name)) {
+    window.alert('同级已存在同名项目');
+    return;
+  }
+
+  try {
+    const updatedEntry = await Fs.move(target.fsEntry, parentFs, {
+      newName: name,
+      sourceParent: parentFs,
+    });
+    const oldKey = target.key;
+    const newPath = updatedEntry.path ?? joinPaths(parent.path ?? parent.label, name);
+    rebaseNodePaths(target, oldKey, newPath, updatedEntry, name);
+    remapKeyList(expandedKeys.value, oldKey, newPath);
+    remapKeyList(selectedKeys.value, oldKey, newPath);
+    updateOpenFilesAfterMove(oldKey, newPath, target.type);
+  } catch (e) {
+    console.error('重命名失败', e);
+    window.alert('重命名失败: ' + (e as Error).message);
+  }
 }
 
-function deleteNode(target: ExplorerNode) {
+async function deleteNode(target: ExplorerNode) {
   if (!target.fsEntry) return;
   const parent = findParentNode(target.key);
   const parentFs = parent?.fsEntry;
@@ -876,20 +1171,311 @@ function deleteNode(target: ExplorerNode) {
     window.alert('无法删除根目录');
     return;
   }
-  Fs.remove(target.fsEntry, parentFs)
-    .then(() => {
-      extractNode(target.key);
-      if (selectedKeys.value.includes(target.key)) {
-        selectedKeys.value = [];
-      }
-    })
-    .catch((e) => {
-      console.error('删除失败', e);
-      window.alert('删除失败: ' + (e as Error).message);
-    });
+  const confirmed = window.confirm(`确认删除「${target.label}」吗？`);
+  if (!confirmed) return;
+  try {
+    await Fs.remove(target.fsEntry, parentFs);
+    extractNode(target.key);
+    closeOpenFilesUnder(target.key, target.type);
+    if (clipboard.item && clipboard.item.path === target.path) {
+      clipboard.item = null;
+    }
+    if (selectedKeys.value.includes(target.key)) {
+      selectedKeys.value = [];
+    }
+  } catch (e) {
+    console.error('删除失败', e);
+    window.alert('删除失败: ' + (e as Error).message);
+  }
 }
 
-function handleMenuSelect(key: string) {
+function normalizePathForCompare(path: string) {
+  return path.replace(/\\/g, '/');
+}
+
+function closeOpenFilesUnder(baseKey: string, type: ExplorerNode['type']) {
+  const base = normalizePathForCompare(baseKey);
+  const isDir = type === 'folder';
+  const open = [...workspace.openFiles];
+  for (const file of open) {
+    const normalized = normalizePathForCompare(file.path);
+    if (normalized === base || (isDir && normalized.startsWith(`${base}/`))) {
+      closeFile(file.path);
+    }
+  }
+}
+
+function remapKeyList(list: string[], oldBase: string, newBase: string) {
+  list.forEach((key, idx) => {
+    const next = replacePathBase(key, oldBase, newBase);
+    if (next && next !== key) {
+      list[idx] = next;
+    }
+  });
+}
+
+function updateNodePathRecursive(node: ExplorerNode, oldBase: string, newBase: string) {
+  const nextKey = replacePathBase(node.key, oldBase, newBase);
+  if (nextKey) node.key = nextKey;
+  const nextPath = replacePathBase(node.path ?? node.key, oldBase, newBase);
+  if (nextPath) node.path = nextPath;
+  if (node.fsEntry?.path) {
+    const nextFsPath = replacePathBase(node.fsEntry.path, oldBase, newBase);
+    if (nextFsPath) node.fsEntry.path = nextFsPath;
+  }
+  const children = node.children as ExplorerNode[] | undefined;
+  if (children) {
+    children.forEach((child) => updateNodePathRecursive(child, oldBase, newBase));
+  }
+}
+
+function rebaseNodePaths(
+  node: ExplorerNode,
+  oldBase: string,
+  newBase: string,
+  entry: FsEntry,
+  label: string,
+) {
+  updateNodePathRecursive(node, oldBase, newBase);
+  node.label = label;
+  node.key = newBase;
+  node.path = newBase;
+  node.fsEntry = entry;
+  if (entry.webHandle) {
+    node.handle =
+      entry.kind === 'directory'
+        ? (entry.webHandle as FileSystemDirectoryHandle)
+        : (entry.webHandle as FileSystemFileHandle);
+  }
+}
+
+function updateOpenFilesAfterMove(oldBase: string, newBase: string, type: ExplorerNode['type']) {
+  const isDir = type === 'folder';
+  const normalizedOld = normalizePathForCompare(oldBase);
+
+  for (const file of workspace.openFiles) {
+    const normalized = normalizePathForCompare(file.path);
+    if (normalized === normalizedOld || (isDir && normalized.startsWith(`${normalizedOld}/`))) {
+      const nextPath = replacePathBase(file.path, oldBase, newBase);
+      if (nextPath) {
+        file.path = nextPath;
+        file.name = nextPath.split(/[/\\]+/u).pop() || file.name;
+      }
+    }
+  }
+
+  const current = workspace.currentFile;
+  if (current) {
+    const normalizedCurrent = normalizePathForCompare(current.path);
+    if (normalizedCurrent === normalizedOld || (isDir && normalizedCurrent.startsWith(`${normalizedOld}/`))) {
+      const nextPath = replacePathBase(current.path, oldBase, newBase);
+      if (nextPath) {
+        current.path = nextPath;
+        current.name = nextPath.split(/[/\\]+/u).pop() || current.name;
+      }
+    }
+  }
+}
+
+function copyNode(node: ExplorerNode) {
+  if (!node.fsEntry) {
+    window.alert('无法复制该项：缺少文件信息');
+    return;
+  }
+  const pathValue = node.path ?? node.key;
+  clipboard.item = {
+    entry: node.fsEntry,
+    type: node.type,
+    name: node.label,
+    path: pathValue,
+    mode: 'copy',
+  };
+}
+
+function cutNode(node: ExplorerNode) {
+  if (!node.fsEntry) {
+    window.alert('无法剪切该项：缺少文件信息');
+    return;
+  }
+  const pathValue = node.path ?? node.key;
+  const parent = findParentNode(pathValue);
+  clipboard.item = {
+    entry: node.fsEntry,
+    type: node.type,
+    name: node.label,
+    path: pathValue,
+    mode: 'cut',
+    ...(parent?.fsEntry ? { parentKey: parent.key, parentEntry: parent.fsEntry } : {}),
+  };
+}
+
+function resolveTargetDirectory(target?: ExplorerNode | null): ExplorerNode | null {
+  if (!target) return explorerData.value[0] ?? null;
+  if (target.type === 'folder') return target;
+  return findParentNode(target.key);
+}
+
+function suggestCopyName(base: string) {
+  const match = base.match(/^(.*?)(\.[^./\\]+)$/u);
+  if (!match) return `${base}-副本`;
+  const [, name, ext] = match;
+  return `${name}-副本${ext}`;
+}
+
+function validatePasteName(dirNode: ExplorerNode, desired: string, excludeKey?: string): string | null {
+  if (!hasNameConflict(dirNode, desired, excludeKey)) return desired;
+  const fallback = suggestCopyName(desired);
+  const next = window.prompt('目标目录已存在同名项，请输入新名称', fallback)?.trim();
+  if (!next) return null;
+  if (hasNameConflict(dirNode, next, excludeKey)) {
+    window.alert('仍然存在同名项，请使用其他名称');
+    return null;
+  }
+  return next;
+}
+
+async function pasteInto(target?: ExplorerNode | null) {
+  const payload = clipboard.item;
+  if (!payload) return;
+  const dirNode = resolveTargetDirectory(target);
+  if (!dirNode || dirNode.type !== 'folder' || !dirNode.fsEntry) {
+    window.alert('请选择有效的目标目录');
+    return;
+  }
+
+  const name = validatePasteName(dirNode, payload.name);
+  if (!name) return;
+
+  try {
+    let newKeyForSelect: string | null = null;
+    if (payload.mode === 'cut') {
+      const oldPath = payload.path ?? payload.entry.path;
+      const sourceParent =
+        payload.parentKey && payload.parentEntry
+          ? payload.parentEntry
+          : findParentNode(oldPath ?? '')?.fsEntry;
+      const moveOptions = sourceParent ? { newName: name, sourceParent } : { newName: name };
+      const moved = await Fs.move(payload.entry, dirNode.fsEntry, moveOptions);
+      const newPath = moved.path ?? joinPaths(dirNode.path ?? dirNode.label, name);
+      const extracted = oldPath ? extractNode(oldPath) : null;
+      const movedNode = extracted?.node ?? null;
+      if (movedNode) {
+        rebaseNodePaths(movedNode, oldPath ?? movedNode.key, newPath, moved, name);
+        ensureChildren(dirNode).push(movedNode);
+        if (oldPath) {
+          updateOpenFilesAfterMove(oldPath, newPath, movedNode.type);
+        }
+        if (oldPath) {
+          remapKeyList(expandedKeys.value, oldPath, newPath);
+          remapKeyList(selectedKeys.value, oldPath, newPath);
+        }
+        newKeyForSelect = movedNode.key;
+      } else {
+        const fallbackNode: ExplorerNode = {
+          key: newPath,
+          label: name,
+          type: payload.type,
+          path: newPath,
+          fsEntry: moved,
+          ...(payload.type === 'folder'
+            ? { children: convertFsTreeToExplorer(await Fs.buildTree(moved), newPath) }
+            : {}),
+          ...(moved.webHandle
+            ? {
+                handle:
+                  moved.kind === 'directory'
+                    ? (moved.webHandle as FileSystemDirectoryHandle)
+                    : (moved.webHandle as FileSystemFileHandle),
+              }
+            : {}),
+        };
+        ensureChildren(dirNode).push(fallbackNode);
+        newKeyForSelect = newPath;
+      }
+      clipboard.item = null;
+    } else {
+      const created = await Fs.copy(payload.entry, dirNode.fsEntry, { newName: name });
+      const newPath = created.path ?? joinPaths(dirNode.path ?? dirNode.label, name);
+      const children =
+        payload.type === 'folder'
+          ? convertFsTreeToExplorer(await Fs.buildTree(created), newPath)
+          : undefined;
+
+      const newNode: ExplorerNode =
+        payload.type === 'folder'
+          ? {
+              key: newPath,
+              label: name,
+              type: 'folder',
+              path: newPath,
+              fsEntry: created,
+              children: children ?? [],
+              ...(created.webHandle
+                ? { handle: created.webHandle as FileSystemDirectoryHandle }
+                : {}),
+            }
+          : {
+              key: newPath,
+              label: name,
+              type: 'file',
+              path: newPath,
+              fsEntry: created,
+              ...(created.webHandle ? { handle: created.webHandle as FileSystemFileHandle } : {}),
+            };
+
+      ensureChildren(dirNode).push(newNode);
+      newKeyForSelect = newNode.key;
+    }
+    if (!expandedKeys.value.includes(dirNode.key)) {
+      expandedKeys.value.push(dirNode.key);
+    }
+    clipboard.item = payload.mode === 'copy' ? clipboard.item : null;
+    selectedKeys.value = newKeyForSelect ? [newKeyForSelect] : [];
+  } catch (e) {
+    console.error('粘贴失败', e);
+    window.alert('粘贴失败: ' + (e as Error).message);
+  }
+}
+
+function formatBytes(size?: number) {
+  if (typeof size !== 'number' || Number.isNaN(size)) return '-';
+  if (size < 1024) return `${size} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = size / 1024;
+  let unitIdx = 0;
+  while (value >= 1024 && unitIdx < units.length - 1) {
+    value /= 1024;
+    unitIdx += 1;
+  }
+  return `${value.toFixed(1)} ${units[unitIdx]}`;
+}
+
+async function showProperties(node: ExplorerNode) {
+  const baseEntry: FsEntry = node.fsEntry ?? {
+    kind: node.type === 'folder' ? 'directory' : 'file',
+    name: node.label,
+    path: node.path ?? node.key,
+  };
+
+  let stat: Awaited<ReturnType<typeof Fs.stat>> | null = null;
+  try {
+    stat = await Fs.stat(baseEntry);
+  } catch (e) {
+    console.warn('读取属性失败', e);
+  }
+
+  propertyDialog.name = node.label;
+  propertyDialog.type = node.type === 'folder' ? '文件夹' : '文件';
+  propertyDialog.path = node.path ?? baseEntry.path ?? '-';
+  propertyDialog.size =
+    stat?.size !== undefined ? formatBytes(stat.size) : node.type === 'folder' ? '-' : '未知';
+  propertyDialog.modified = stat?.modified
+    ? new Date(stat.modified).toLocaleString()
+    : '未知';
+  propertyDialog.show = true;
+}
+
+async function handleMenuSelect(key: string) {
   const node = contextMenu.node;
   if (!node && key !== 'new-file' && key !== 'new-folder') return;
 
@@ -900,11 +1486,23 @@ function handleMenuSelect(key: string) {
     case 'new-folder':
       void createSiblingOrChild('folder');
       break;
+    case 'cut':
+      if (node) cutNode(node);
+      break;
+    case 'copy':
+      if (node) copyNode(node);
+      break;
+    case 'paste':
+      await pasteInto(node ?? explorerData.value[0]);
+      break;
     case 'rename':
-      if (node) renameNode(node);
+      if (node) await renameNode(node);
       break;
     case 'delete':
-      if (node) deleteNode(node);
+      if (node) await deleteNode(node);
+      break;
+    case 'info':
+      if (node) await showProperties(node);
       break;
     default:
       break;
@@ -1256,5 +1854,48 @@ function showCompatibilityHelp() {
 
 .theme-light .opened-dot.dirty {
   background: #dc2626;
+}
+
+.prop-card {
+  width: 360px;
+  max-width: 90vw;
+}
+
+.prop-header {
+  padding: 12px 16px;
+}
+
+.prop-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prop-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.prop-label {
+  color: var(--vscode-muted, #9ca3af);
+  min-width: 72px;
+}
+
+.prop-value {
+  color: var(--vscode-foreground, #e8ecf3);
+  text-align: right;
+  flex: 1;
+}
+
+.theme-light .prop-value {
+  color: #111827;
+}
+
+.prop-path {
+  text-align: left;
+  word-break: break-all;
+  white-space: normal;
 }
 </style>

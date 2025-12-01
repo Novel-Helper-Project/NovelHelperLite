@@ -51,6 +51,58 @@ export async function remove(entry: FsEntry): Promise<void> {
   }
 }
 
+export async function copy(entry: FsEntry, targetDir: FsEntry, options?: { newName?: string }): Promise<FsEntry> {
+  const fs = await import('node:fs/promises');
+  const pathMod = await import('node:path');
+  const destName = options?.newName || entry.name;
+  const from = entry.path!;
+  const to = targetDir.path ? pathMod.join(targetDir.path, destName) : destName;
+
+  if (typeof fs.cp === 'function') {
+    await fs.cp(from, to, { recursive: true });
+  } else {
+    const stat = await fs.stat(from);
+    if (stat.isDirectory()) {
+      await fs.mkdir(to, { recursive: true });
+      const items = await fs.readdir(from, { withFileTypes: true });
+      for (const item of items) {
+        const childEntry: FsEntry = {
+          kind: item.isDirectory() ? 'directory' : 'file',
+          name: item.name,
+          path: pathMod.join(from, item.name),
+        };
+        await copy(childEntry, { kind: 'directory', name: targetDir.name, path: to });
+      }
+    } else {
+      await fs.copyFile(from, to);
+    }
+  }
+
+  return { kind: entry.kind, name: destName, path: to };
+}
+
+export async function move(
+  entry: FsEntry,
+  targetDir: FsEntry,
+  options?: { newName?: string; sourceParent?: FsEntry },
+): Promise<FsEntry> {
+  const fs = await import('node:fs/promises');
+  const pathMod = await import('node:path');
+  const destName = options?.newName || entry.name;
+  const from = entry.path!;
+  const to = targetDir.path ? pathMod.join(targetDir.path, destName) : destName;
+
+  try {
+    await fs.rename(from, to);
+  } catch {
+    // fallback for cross-device moves
+    await copy(entry, targetDir, { newName: destName });
+    await remove(entry);
+  }
+
+  return { kind: entry.kind, name: destName, path: to };
+}
+
 export async function buildTree(dir: FsEntry): Promise<Array<FsEntry & { children?: FsEntry[] }>> {
   const rootChildren = await list(dir);
   const result: Array<FsEntry & { children?: FsEntry[] }> = [];

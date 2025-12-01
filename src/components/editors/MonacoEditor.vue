@@ -238,7 +238,7 @@ function registerCommandsForFile(file: OpenFile) {
           pasteOnNewLine: false,
         });
       } catch (err) {
-        const rawMessage = err instanceof Error ? err.message : String(err ?? '未知错误');
+        const rawMessage = err instanceof Error ? err.message : (typeof err === 'string' ? err : '未知错误');
 
         if (rawMessage.includes("unknown service 'productService'")) {
           throw new Error(

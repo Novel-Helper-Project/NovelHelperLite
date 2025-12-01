@@ -87,6 +87,92 @@ export async function remove(entry: FsEntry, parent?: FsEntry): Promise<void> {
   await dh.removeEntry(entry.name, { recursive: entry.kind === 'directory' });
 }
 
+export async function copy(
+  entry: FsEntry,
+  targetDir: FsEntry,
+  options?: { newName?: string },
+): Promise<FsEntry> {
+  const destDir = targetDir.webHandle as FileSystemDirectoryHandle;
+  if (!destDir || destDir.kind !== 'directory') throw new Error('无效的目标目录');
+  await ensureWebWritePermission(destDir);
+  const destName = options?.newName || entry.name;
+
+  const join = (base: string, name: string) => {
+    const cleanedBase = base.replace(/\/+$/u, '');
+    const cleanedName = name.replace(/^\/+/u, '');
+    if (!cleanedBase) return cleanedName;
+    return `${cleanedBase}/${cleanedName}`;
+  };
+
+  async function copyEntry(
+    source: FsEntry,
+    destinationDir: FileSystemDirectoryHandle,
+    destinationBase: string,
+    overrideName?: string,
+  ): Promise<FsEntry> {
+    const targetName = overrideName || source.name;
+    if (source.kind === 'file') {
+      const sourceHandle = source.webHandle as FileSystemFileHandle | undefined;
+      if (!sourceHandle) throw new Error('缺少源文件句柄');
+      const targetHandle = await destinationDir.getFileHandle(targetName, { create: true });
+      const writable = await targetHandle.createWritable();
+      const sourceBlob = await sourceHandle.getFile();
+      await writable.write(await sourceBlob.arrayBuffer());
+      await writable.close();
+      return {
+        kind: 'file',
+        name: targetName,
+        path: join(destinationBase, targetName),
+        webHandle: targetHandle,
+      };
+    }
+
+    const sourceDir = source.webHandle as FileSystemDirectoryHandle | undefined;
+    if (!sourceDir || sourceDir.kind !== 'directory') throw new Error('缺少源目录句柄');
+    const nestedTarget = await destinationDir.getDirectoryHandle(targetName, { create: true });
+    const iterable = sourceDir as FileSystemDirectoryHandle & {
+      entries: () => AsyncIterableIterator<[string, FileSystemHandle]>;
+    };
+    for await (const [childName, childHandle] of iterable.entries()) {
+      const childEntry: FsEntry = {
+        kind: childHandle.kind === 'directory' ? 'directory' : 'file',
+        name: childName,
+        path: join(source.path ?? sourceDir.name, childName),
+        webHandle:
+          childHandle.kind === 'directory'
+            ? (childHandle as FileSystemDirectoryHandle)
+            : (childHandle as FileSystemFileHandle),
+      };
+      await copyEntry(childEntry, nestedTarget, join(destinationBase, targetName));
+    }
+    return {
+      kind: 'directory',
+      name: targetName,
+      path: join(destinationBase, targetName),
+      webHandle: nestedTarget,
+    };
+  }
+
+  const base = targetDir.path ?? destDir.name;
+  return await copyEntry(entry, destDir, base, destName);
+}
+
+export async function move(
+  entry: FsEntry,
+  targetDir: FsEntry,
+  options?: { newName?: string; sourceParent?: FsEntry },
+): Promise<FsEntry> {
+  const copied = await copy(
+    entry,
+    targetDir,
+    options?.newName ? { newName: options.newName } : undefined,
+  );
+  const parent = options?.sourceParent;
+  if (!parent) throw new Error('移动文件需要源目录句柄');
+  await remove(entry, parent);
+  return copied;
+}
+
 export async function buildTree(dir: FsEntry): Promise<Array<FsEntry & { children?: FsEntry[] }>> {
   const rootChildren = await list(dir);
   const result: Array<FsEntry & { children?: FsEntry[] }> = [];

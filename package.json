@@ -24,7 +24,9 @@
     "test": "echo \"No test specified\" && exit 0",
     "dev": "quasar dev",
     "build": "quasar build",
-    "postinstall": "quasar prepare"
+    "postinstall": "quasar prepare",
+    "deploy": "npm run build && wrangler pages deploy dist/spa",
+    "deploy:preview": "npm run build && wrangler pages deploy dist/spa --preview"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
