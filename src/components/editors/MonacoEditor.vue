@@ -32,6 +32,7 @@ import type { OpenFile } from 'src/stores/workspace';
 import type { EditorViewState } from 'src/types/editorState';
 import { useSettingsStore } from 'src/stores/settings';
 import { registerEditorCommands, unregisterEditorCommands } from 'src/services/editorCommands';
+import { saveFile } from 'src/services/fileSaver';
 
 const props = defineProps<{
   file: OpenFile;
@@ -291,6 +292,12 @@ onMounted(() => {
 
   // 注册剪贴板命令
   registerCommandsForFile(props.file);
+
+  // 注册保存快捷键 (Ctrl/Cmd + S)
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+    const content = editor?.getValue() ?? '';
+    void saveFile(props.file, content);
+  });
 
   // 恢复视图状态
   if (props.file.viewState) {

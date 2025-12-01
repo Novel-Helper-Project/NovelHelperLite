@@ -5,9 +5,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, onUnmounted } from 'vue';
 import type { OpenFile } from 'src/stores/workspace';
 import MilkdownEditor from '../MilkdownEditor.vue';
+import { saveFile } from 'src/services/fileSaver';
 
 const props = defineProps<{
   file: OpenFile;
@@ -32,6 +33,29 @@ watch(
 // 监听内部内容变化
 watch(content, (newContent) => {
   emit('update:content', newContent);
+});
+
+// 注册保存快捷键
+function handleKeydown(e: KeyboardEvent) {
+  const isSave =
+    (e.ctrlKey || e.metaKey) &&
+    !e.shiftKey &&
+    !e.altKey &&
+    (e.key === 's' || e.key === 'S');
+  if (isSave) {
+    e.preventDefault();
+    void saveFile(props.file, content.value);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', handleKeydown);
+}
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', handleKeydown);
+  }
 });
 </script>
 
