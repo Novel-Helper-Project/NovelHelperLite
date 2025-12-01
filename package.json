@@ -67,12 +67,12 @@
     "vue-eslint-parser": "^10.2.0",
     "vue-tsc": "^3.0.7"
   },
-  "overrides": {
-    "rollup": "npm:@rollup/wasm-node@^4.40.0"
-  },
   "engines": {
     "node": "^28 || ^26 || ^24 || ^22 || ^20",
     "npm": ">= 6.13.4",
     "yarn": ">= 1.21.1"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.53.3"
   }
 }
