@@ -6,14 +6,22 @@
       v-if="selectionHandles.visible"
       class="selection-handle selection-handle-start"
       :style="selectionHandles.startStyle"
-      @touchstart.prevent="(e: TouchEvent) => onHandleTouchStart(e, 'start')"
-    ></div>
+    >
+      <div
+        class="selection-touch-area"
+        @touchstart.prevent.stop="(e: TouchEvent) => onHandleTouchStart(e, 'start')"
+      ></div>
+    </div>
     <div
       v-if="selectionHandles.visible"
       class="selection-handle selection-handle-end"
       :style="selectionHandles.endStyle"
-      @touchstart.prevent="(e: TouchEvent) => onHandleTouchStart(e, 'end')"
-    ></div>
+    >
+      <div
+        class="selection-touch-area"
+        @touchstart.prevent.stop="(e: TouchEvent) => onHandleTouchStart(e, 'end')"
+      ></div>
+    </div>
   </div>
 </template>
 
@@ -92,13 +100,13 @@ function updateSelectionHandles() {
   }
 
   // 计算相对容器的偏移, 修正内层 overflow guard 的位移
-  const editorDom = editor.getDomNode();
-  const host = editorEl.value;
-  if (!editorDom || !host) return;
-  const hostRect = host.getBoundingClientRect();
-  const editorRect = editorDom.getBoundingClientRect();
-  const offsetX = editorRect.left - hostRect.left;
-  const offsetY = editorRect.top - hostRect.top;
+  // const editorDom = editor.getDomNode();
+  // const host = editorEl.value;
+  // if (!editorDom || !host) return;
+  // const hostRect = host.getBoundingClientRect();
+  // const editorRect = editorDom.getBoundingClientRect();
+  const offsetX = -6;
+  const offsetY = 12;
 
   // 获取行高，用于设置手柄的高度
   const lineHeight = editor.getOption(monaco.editor.EditorOption.lineHeight);
@@ -247,7 +255,8 @@ function registerCommandsForFile(file: OpenFile) {
           pasteOnNewLine: false,
         });
       } catch (err) {
-        const rawMessage = err instanceof Error ? err.message : (typeof err === 'string' ? err : '未知错误');
+        const rawMessage =
+          err instanceof Error ? err.message : typeof err === 'string' ? err : '未知错误';
 
         if (rawMessage.includes("unknown service 'productService'")) {
           throw new Error(
@@ -484,13 +493,13 @@ function getLanguageFromMime(mime: string): string {
 .selection-handle-start::before {
   bottom: 0;
   left: 0;
-  transform: translateX(-50%);
+  /* transform: translateX(-50%); */
 }
 
 .selection-handle-end::before {
   bottom: 0;
   right: 0;
-  transform: translateX(50%);
+  /* transform: translateX(50%); */
 }
 
 .selection-handle::after {
@@ -510,5 +519,11 @@ function getLanguageFromMime(mime: string): string {
 .selection-handle-end::after {
   right: 50%;
   transform: translateX(50%);
+}
+
+.selection-touch-area {
+  position: absolute;
+  inset: -16px -12px -8px -12px;
+  background: transparent;
 }
 </style>
