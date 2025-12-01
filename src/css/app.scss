@@ -96,6 +96,49 @@ body {
   padding: 0;
 }
 
+/* Quasar Dialog theme overrides */
+.q-dialog__inner,
+.q-card {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-text);
+}
+
+.q-dialog__title {
+  color: var(--vscode-text);
+}
+
+.q-dialog__message {
+  color: var(--vscode-descriptionForeground);
+}
+
+.q-dialog-plugin .q-btn--standard {
+  color: var(--vscode-accent);
+}
+
+.q-dialog-plugin .q-btn--standard.text-negative {
+  color: #e36a76;
+}
+
+.q-dialog-plugin .q-btn--standard.text-warning {
+  color: #f0c674;
+}
+
+.q-dialog-plugin .q-radio__inner--truthy,
+.q-dialog-plugin .q-radio__bg {
+  color: var(--vscode-accent);
+}
+
+.q-dialog-plugin .q-separator,
+.q-dialog-plugin hr {
+  border-color: var(--vscode-border);
+}
+
+.theme-light .q-dialog__inner,
+.theme-light .q-card {
+  background: var(--vscode-main-bg);
+  color: var(--vscode-text);
+}
+
 /* Theme-aware utility classes */
 .text-white {
   color: var(--vscode-text) !important;
