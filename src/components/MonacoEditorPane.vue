@@ -58,11 +58,20 @@
           :disable="!canUseClipboard"
           @click="() => handleClipboard('cut')"
         />
+        <q-btn
+          v-if="showMilkdownToggle"
+          dense
+          flat
+          :icon="isMilkdownActive ? 'code' : 'wysiwyg'"
+          :label="isMilkdownActive ? '切回 Monaco' : '切到 Milkdown'"
+          :title="isMilkdownActive ? '切换回 Monaco 编辑' : '切换到 Milkdown 编辑'"
+          @click="toggleMilkdownEditor"
+        />
         <q-btn dense flat icon="save" :disable="!canSave" @click="saveCurrentFile" />
       </div>
     </div>
 
-    <div class="editor-body">
+    <div ref="editorBodyRef" class="editor-body">
       <div v-if="!workspace.currentFile" class="welcome">
         <div class="welcome-title">欢迎使用 Novel Helper Lite</div>
         <div class="welcome-subtitle">在左侧选择文件或打开文件夹以开始</div>
@@ -85,6 +94,15 @@
       <div v-if="currentImage && !currentImage.mediaUrl" class="image-placeholder">
         无法加载图片资源，请检查文件路径或权限
       </div>
+
+      <MilkdownEditor
+        v-if="showMilkdown"
+        :key="workspace.currentFile?.path ?? 'milkdown'"
+        v-model="milkdownContent"
+        ref="milkdownWrapperRef"
+        class="milkdown-wrapper"
+        style="position: relative; flex: 1; min-height: 0; overflow: hidden"
+      />
 
       <div
         v-show="showMonaco"
@@ -127,6 +145,7 @@ import Fs from 'src/services/filesystem';
 import type { FsEntry } from 'src/services/filesystem/types';
 import { isMobileDevice } from 'src/utils/device';
 import InlineImageViewer from './InlineImageViewer.vue';
+import MilkdownEditor from './MilkdownEditor.vue';
 
 const g = self as typeof self & {
   MonacoEnvironment: {
@@ -152,9 +171,12 @@ const {
   closeFile,
   setImageViewState,
   setEditorViewState,
+  setEditorMode,
 } = useWorkspaceStore();
 const editorEl = ref<HTMLDivElement | null>(null);
 const monacoWrapperRef = ref<HTMLDivElement | null>(null);
+const milkdownWrapperRef = ref<HTMLElement | null>(null);
+const editorBodyRef = ref<HTMLDivElement | null>(null);
 const tabbarRef = ref<HTMLDivElement | null>(null);
 const tabTrackRef = ref<HTMLDivElement | null>(null);
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
@@ -229,17 +251,63 @@ const tabTrackStyle = computed(() => ({
   transform: `translateX(-${tabScroll.value}px)`,
 }));
 
-const canSave = computed(() => {
+let windowResizeHandler: (() => void) | null = null;
+
+const currentLanguage = computed(() => {
+  const name = workspace.currentFile?.name;
+  if (!name || workspace.currentFile?.isImage) return '';
+  return guessLanguage(name);
+});
+
+const isMarkdownLike = computed(
+  () => currentLanguage.value === 'markdown' || currentLanguage.value === 'plaintext',
+);
+
+const isMilkdownActive = computed(() => {
+  const file = workspace.currentFile;
+  if (!file) return false;
+  if (!isMarkdownLike.value) return false;
+  return file.editorMode === 'milkdown';
+});
+
+const showMilkdown = computed(
+  () => !!workspace.currentFile && !workspace.currentFile.isImage && isMilkdownActive.value,
+);
+
+const showMonaco = computed(
+  () => !!workspace.currentFile && !workspace.currentFile.isImage && !isMilkdownActive.value,
+);
+
+const showMilkdownToggle = computed(
+  () => isMarkdownLike.value && !!workspace.currentFile && !workspace.currentFile.isImage,
+);
+
+const milkdownContent = computed({
+  get: () => workspace.currentFile?.content ?? '',
+  set: (value: string) => {
+    if (!workspace.currentFile) return;
+    updateCurrentContent(value);
+  },
+});
+
+const hasWritableTarget = computed(() => {
   const current = workspace.currentFile;
   if (!current) return false;
-  if (current.onSave) return true;
-  if (!editorReady.value) return false;
   if (current.handle && current.handle.kind === 'file') return true;
   if (current.fsEntry && current.fsEntry.kind === 'file') return true;
   return false;
 });
+
+const canSave = computed(() => {
+  const current = workspace.currentFile;
+  if (!current) return false;
+  if (current.onSave) return true;
+  if (isMilkdownActive.value) return hasWritableTarget.value;
+  if (!editorReady.value) return false;
+  return hasWritableTarget.value;
+});
+
 const canUseClipboard = computed(() => editorReady.value && showMonaco.value);
-const showMonaco = computed(() => !!workspace.currentFile && !workspace.currentFile.isImage);
 const imageFiles = computed(() =>
   workspace.openFiles.filter((f): f is OpenFile & { isImage: true } => !!f.isImage),
 );
@@ -258,12 +326,20 @@ onMounted(() => {
 
   const el = editorEl.value;
   const wrapperEl = monacoWrapperRef.value;
-  if ((el || wrapperEl) && 'ResizeObserver' in window) {
-    resizeObserver = new ResizeObserver(() => layoutEditor());
+  const bodyEl = editorBodyRef.value;
+  if ((el || wrapperEl || bodyEl) && 'ResizeObserver' in window) {
+    resizeObserver = new ResizeObserver(() => {
+      layoutEditor();
+      // 注意：不在这里调用 updateMilkdownHeight()，避免循环触发
+    });
     if (el) resizeObserver.observe(el);
     if (wrapperEl) resizeObserver.observe(wrapperEl);
+    if (bodyEl) resizeObserver.observe(bodyEl);
   }
-  window.addEventListener('resize', layoutEditor);
+  windowResizeHandler = () => {
+    layoutEditor();
+  };
+  window.addEventListener('resize', windowResizeHandler);
   revealListener = (event: Event) => handleRevealEvent(event);
   window.addEventListener('workspace-reveal', revealListener);
   tabbarWheelListener = (event: WheelEvent) => handleTabbarWheel(event);
@@ -300,6 +376,11 @@ onMounted(() => {
       if (file.isImage) {
         return;
       }
+
+      // // 默认让 markdown / 文本文件进入 Milkdown 模式，方便直接看到浮动工具条
+      // if (isMarkdownLike.value && milkdownStates[file.path] == null) {
+      //   milkdownStates[file.path] = true;
+      // }
 
       const instance = await ensureEditor();
       if (!instance) return;
@@ -339,7 +420,7 @@ onMounted(() => {
     () => showMonaco.value,
     (shouldShow) => {
       if (shouldShow) {
-        void ensureEditor();
+        void ensureEditor().then(() => syncMonacoModelWithWorkspace());
         layoutEditor();
       }
     },
@@ -401,6 +482,10 @@ onBeforeUnmount(() => {
     tabResizeObserver = null;
   }
   window.removeEventListener('resize', layoutEditor);
+  if (windowResizeHandler) {
+    window.removeEventListener('resize', windowResizeHandler);
+    windowResizeHandler = null;
+  }
 
   // 清理选择手柄的全局事件监听器
   window.removeEventListener('touchmove', onGlobalTouchMove);
@@ -589,6 +674,8 @@ function getTabPosition(path: string): { start: number; end: number } | null {
   }
   return null;
 }
+
+// 方案 B：Milkdown 完全使用 flex 布局填满 editor-body，不再单独计算高度
 
 // --- 选择手柄功能函数 ---
 
@@ -829,15 +916,19 @@ function resolveFsTarget(file: OpenFile): { dir: FsEntry; name: string } | null 
     kind: 'directory',
     name: dirName || 'root',
     path: dirPath,
+    // 保留原始的 handle/目录信息，否则 Web 模式无法写入
     ...(entry.capDirectory ? { capDirectory: entry.capDirectory } : {}),
+    ...(entry.webHandle ? { webHandle: entry.webHandle } : {}),
+    ...(file.handle ? { webHandle: file.handle } : {}),
   };
   return { dir: dirEntry, name: fileName };
 }
 
 async function saveCurrentFile() {
-  if (!workspace.currentFile || !editor) return;
+  if (!workspace.currentFile) return;
 
-  const content = editor.getValue();
+  const content =
+    workspace.currentFile.content ?? (editor && showMonaco.value ? editor.getValue() : '');
 
   // 如果有自定义保存回调（例如设置文件），优先使用
   if (workspace.currentFile.onSave) {
@@ -852,7 +943,21 @@ async function saveCurrentFile() {
     }
   }
 
-  // 优先使用统一的 Fs 封装
+  // 优先使用 File System Access API（Web 模式下有 handle 时直接用）
+  if (workspace.currentFile.handle && workspace.currentFile.handle.kind === 'file') {
+    try {
+      const writable = await workspace.currentFile.handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      updateCurrentContent(content);
+      markCurrentFileSaved(content);
+      return;
+    } catch (error) {
+      console.error('使用 FileSystemHandle 保存失败:', error);
+    }
+  }
+
+  // 备用：使用统一的 Fs 封装（Capacitor 等平台）
   const fsTarget = resolveFsTarget(workspace.currentFile);
   if (fsTarget) {
     try {
@@ -861,21 +966,51 @@ async function saveCurrentFile() {
       markCurrentFileSaved(content);
       return;
     } catch (error) {
-      console.error('使用 Fs 写入失败，尝试 FileSystemHandle 备用方案:', error);
+      console.error('使用 Fs 写入失败:', error);
     }
   }
+}
 
-  // 备用：File System Access API（仅在 web/桌面有 handle 时）
-  if (workspace.currentFile.handle && workspace.currentFile.handle.kind === 'file') {
-    try {
-      const writable = await workspace.currentFile.handle.createWritable();
-      await writable.write(content);
-      await writable.close();
-      updateCurrentContent(content);
-      markCurrentFileSaved(content);
-    } catch (error) {
-      console.error('保存文件失败:', error);
+async function toggleMilkdownEditor() {
+  const current = workspace.currentFile;
+  if (!current || current.isImage || !isMarkdownLike.value) return;
+  const next = current.editorMode !== 'milkdown';
+  setEditorMode(current.path, next ? 'milkdown' : 'monaco');
+  if (next && editor) {
+    const savedState = editor.saveViewState();
+    viewStates.set(current.path, savedState);
+    setEditorViewState(current.path, (savedState as unknown as EditorViewState) ?? undefined);
+  }
+  if (!next) {
+    await ensureEditor();
+    syncMonacoModelWithWorkspace();
+    const viewState =
+      viewStates.get(current.path) ??
+      (current.viewState as monaco.editor.ICodeEditorViewState | null | undefined);
+    if (viewState && editor) {
+      editor.restoreViewState(viewState);
     }
+    layoutEditor();
+  }
+}
+
+function syncMonacoModelWithWorkspace() {
+  if (!editor || !workspace.currentFile) return;
+  const model = editor.getModel();
+  if (!model) return;
+  const content = workspace.currentFile.content ?? '';
+  if (model.getValue() === content) return;
+  const selection = editor.getSelection();
+  const selections = selection ? [selection] : null;
+  const result = model.pushEditOperations(
+    selections,
+    [{ range: model.getFullModelRange(), text: content }],
+    () => selections,
+  );
+  if (result && result.length) {
+    editor.setSelections(result);
+  } else if (selection) {
+    editor.setSelection(selection);
   }
 }
 
@@ -1095,6 +1230,15 @@ function disposeEditor() {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+}
+
+.milkdown-wrapper {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .editor-body {

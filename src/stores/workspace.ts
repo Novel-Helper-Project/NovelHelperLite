@@ -15,6 +15,8 @@ const MAX_PERSIST_CONTENT_LENGTH = 400_000; // ~400 KB
 const MAX_PERSIST_STATE_SIZE = 900_000; // ~900 KB JSON length safeguard
 const CONTENT_KEY_PREFIX = 'workspace.content';
 
+export type EditorMode = 'monaco' | 'milkdown';
+
 export type OpenFile = {
   path: string;
   name: string;
@@ -28,6 +30,7 @@ export type OpenFile = {
   savedContent?: string;
   imageState?: ImageViewState;
   viewState?: EditorViewState;
+  editorMode?: EditorMode; // 编辑器模式
 };
 
 type WorkspaceState = {
@@ -143,6 +146,16 @@ function setEditorViewState(path: string, viewState?: EditorViewState) {
   schedulePersist();
 }
 
+function setEditorMode(path: string, mode: EditorMode) {
+  const target = state.openFiles.find((f) => f.path === path);
+  if (!target) return;
+  target.editorMode = mode;
+  if (state.currentFile?.path === path) {
+    state.currentFile.editorMode = mode;
+  }
+  schedulePersist();
+}
+
 function buildContentKey(workspaceId: string, path: string, kind: 'content' | 'saved') {
   return `${CONTENT_KEY_PREFIX}:${encodeURIComponent(workspaceId)}:${kind}:${encodeURIComponent(path)}`;
 }
@@ -178,6 +191,7 @@ async function serializeOpenFile(
     ...(typeof file.isImage === 'boolean' ? { isImage: file.isImage } : {}),
     ...(file.imageState ? { imageState: file.imageState } : {}),
     ...(file.viewState ? { viewState: file.viewState } : {}),
+    ...(file.editorMode ? { editorMode: file.editorMode } : {}),
   };
 }
 
@@ -299,6 +313,7 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<OpenFile> {
     ...(typeof file.isImage === 'boolean' ? { isImage: file.isImage } : {}),
     ...(file.imageState ? { imageState: file.imageState } : {}),
     ...(file.viewState ? { viewState: file.viewState } : {}),
+    ...(file.editorMode ? { editorMode: file.editorMode } : {}),
   };
 
   const platform = Fs.getPlatform();
@@ -453,5 +468,6 @@ export function useWorkspaceStore() {
     switchWorkspace,
     setImageViewState,
     setEditorViewState,
+    setEditorMode,
   };
 }

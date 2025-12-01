@@ -1,6 +1,8 @@
 import { storage } from './storage';
 import type { ImageViewState, EditorViewState } from 'src/types/editorState';
 
+export type EditorMode = 'monaco' | 'milkdown';
+
 export interface PersistedOpenFile {
   path: string;
   name: string;
@@ -12,6 +14,7 @@ export interface PersistedOpenFile {
   isImage?: boolean;
   imageState?: ImageViewState;
   viewState?: EditorViewState;
+  editorMode?: EditorMode; // 编辑器模式
 }
 
 export interface PersistedWorkspaceState {
