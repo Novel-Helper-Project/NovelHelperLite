@@ -2,8 +2,21 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers';
-import { AndroidStudioPath } from './appconfig.local';
+import { createRequire } from 'module';
 import 'dotenv/config';
+
+const require = createRequire(import.meta.url);
+
+let AndroidStudioPath = '';
+try {
+  AndroidStudioPath = require('./appconfig.local').AndroidStudioPath ?? '';
+} catch {
+  try {
+    AndroidStudioPath = require('./appconfig.template').AndroidStudioPath ?? '';
+  } catch {
+    AndroidStudioPath = '';
+  }
+}
 
 export default defineConfig((/* ctx */) => {
   return {
