@@ -1,6 +1,6 @@
 <template>
   <q-layout view="lHh Lpr lFf" class="safe-area">
-    <q-header elevated class="app-header safe-area-top">
+    <q-header class="app-header safe-area-top">
       <q-toolbar>
         <!-- 侧边栏切换按钮 -->
         <q-btn

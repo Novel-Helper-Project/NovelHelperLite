@@ -1,15 +1,23 @@
 <template>
-  <TabContentWrapper>
+  <div class="settings-editor-wrapper">
     <SettingsComponent />
-  </TabContentWrapper>
+  </div>
 </template>
 
 <script setup lang="ts">
 import type { OpenFile } from 'src/stores/workspace';
 import SettingsComponent from '../SettingsComponent.vue';
-import TabContentWrapper from '../TabContentWrapper.vue';
 
 defineProps<{
   file: OpenFile;
 }>();
 </script>
+
+<style scoped>
+.settings-editor-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+</style>

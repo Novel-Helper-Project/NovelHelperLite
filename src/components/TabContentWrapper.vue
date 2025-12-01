@@ -13,7 +13,7 @@
 .tab-content-wrapper {
   height: 100%;
   width: 100%;
-  overflow: auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   position: relative;

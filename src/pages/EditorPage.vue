@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-pa-md column no-wrap" style="height: 100%;">
+  <q-page class="editor-page-container">
     <q-tabs
       v-model="activeTab"
       dense
@@ -16,12 +16,12 @@
 
     <q-separator />
 
-    <q-tab-panels v-model="activeTab" animated>
-      <q-tab-panel name="editor" class="q-pa-none">
+    <q-tab-panels v-model="activeTab" animated class="editor-page-panels">
+      <q-tab-panel name="editor" class="q-pa-none editor-tab-panel">
         <MonacoEditorPane />
       </q-tab-panel>
 
-      <q-tab-panel name="settings" class="q-pa-none">
+      <q-tab-panel name="settings" class="q-pa-none editor-tab-panel">
         <SettingsComponent />
       </q-tab-panel>
     </q-tab-panels>
@@ -50,3 +50,34 @@ onUnmounted(() => {
   window.removeEventListener('openSettingsTab', handleOpenSettingsTab);
 });
 </script>
+
+<style scoped>
+.editor-page-container {
+  position: relative;
+  height: 100vh;
+  max-height: 100vh;
+  padding: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-page-panels {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 覆盖 Quasar 默认样式 */
+.editor-page-panels :deep(.q-panel) {
+  overflow: visible;
+}
+
+.editor-tab-panel {
+  padding: 16px 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+</style>

@@ -1,5 +1,5 @@
 <template>
-  <div class="monaco-pane column gap-sm">
+  <div class="monaco-pane">
     <div ref="tabbarRef" class="tabbar">
       <div ref="tabTrackRef" class="tab-track" :style="tabTrackStyle">
         <div class="tab-spacer" :style="{ width: `${tabLayout.before}px` }" />
@@ -377,10 +377,14 @@ function isFileDirty(file: OpenFile) {
 <style scoped>
 .monaco-pane {
   height: 100%;
-  min-height: 400px;
+  max-height: 100%;
   flex: 1;
   min-width: 0;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .tabbar {
@@ -511,6 +515,7 @@ function isFileDirty(file: OpenFile) {
   max-width: 100%;
   min-width: 0;
   min-height: 0;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   background: #0f1216;

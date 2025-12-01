@@ -217,12 +217,11 @@ function resetAllSettings() {
 <style scoped>
 .settings-page {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--vscode-editor-background);
   color: var(--vscode-editor-foreground);
-  padding: 16px;
 }
 
 .settings-header {

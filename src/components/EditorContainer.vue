@@ -1,13 +1,18 @@
 <template>
-  <div class="editor-container">
-    <component
-      v-if="selectedEditor"
-      :is="selectedEditor.component"
-      :file="file"
-      @update:content="handleContentUpdate"
-      @update:viewState="handleViewStateUpdate"
-      @update:imageState="handleImageStateUpdate"
-    />
+  <div
+    ref="containerRef"
+    class="editor-container"
+    :style="{ height: computedHeight + 'px', overflow: 'auto' }"
+  >
+    <div v-if="selectedEditor" class="editor-content">
+      <component
+        :is="selectedEditor.component"
+        :file="file"
+        @update:content="handleContentUpdate"
+        @update:viewState="handleViewStateUpdate"
+        @update:imageState="handleImageStateUpdate"
+      />
+    </div>
     <div v-else class="no-editor">
       <div class="no-editor-icon">📄</div>
       <div class="no-editor-text">无法打开此文件</div>
@@ -17,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { Dialog } from 'quasar';
 import type { OpenFile } from 'src/stores/workspace';
 import { editorRegistry } from 'src/types/editorProvider';
@@ -37,6 +42,38 @@ const emit = defineEmits<{
 const selectedEditor = ref<EditorProvider | null>(null);
 // 存储用户的编辑器偏好(文件扩展名 -> 编辑器ID)
 const editorPreferences = ref<Record<string, string>>({});
+
+// 计算容器高度
+const computedHeight = ref(0);
+const containerRef = ref<HTMLElement | null>(null);
+
+// 计算并更新容器高度
+function updateContainerHeight() {
+  // 防止无限循环
+  if (isUpdatingHeight || !containerRef.value) {
+    return;
+  }
+
+  isUpdatingHeight = true;
+
+  try {
+    const parent = containerRef.value.parentElement;
+    if (parent) {
+      // 使用 clientHeight 精准获取父容器的内部可用高度
+      const newHeight = parent.clientHeight;
+
+      // 只有高度真正变化时才更新
+      if (Math.abs(computedHeight.value - newHeight) > 1) {
+        computedHeight.value = newHeight;
+      }
+    }
+  } finally {
+    // 使用 requestAnimationFrame 确保异步更新
+    requestAnimationFrame(() => {
+      isUpdatingHeight = false;
+    });
+  }
+}
 
 // 获取所有支持该文件的编辑器
 const compatibleEditors = computed(() => {
@@ -192,6 +229,36 @@ watch(
     selectEditor();
   },
 );
+
+// 生命周期钩子
+let resizeObserver: ResizeObserver | null = null;
+let isUpdatingHeight = false;
+
+onMounted(async () => {
+  // 初始化高度
+  await nextTick();
+  updateContainerHeight();
+
+  // 监听父容器大小变化
+  if (containerRef.value && containerRef.value.parentElement) {
+    resizeObserver = new ResizeObserver(() => {
+      updateContainerHeight();
+    });
+    resizeObserver.observe(containerRef.value.parentElement);
+  }
+
+  // 监听窗口大小变化
+  window.addEventListener('resize', updateContainerHeight);
+});
+
+onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+  window.removeEventListener('resize', updateContainerHeight);
+  isUpdatingHeight = false;
+});
 </script>
 
 <style scoped>
@@ -199,7 +266,12 @@ watch(
   width: 100%;
   height: 100%;
   position: relative;
-  overflow: hidden;
+}
+
+.editor-content {
+  width: 100%;
+  height: 100%;
+  /* display: flex; */
 }
 
 .no-editor {

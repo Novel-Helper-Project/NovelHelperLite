@@ -12,6 +12,7 @@ export interface PersistedOpenFile {
   savedContentKey?: string;
   mime?: string;
   isImage?: boolean;
+  isSettings?: boolean; // 标记为设置页面
   imageState?: ImageViewState;
   viewState?: EditorViewState;
   editorMode?: EditorMode; // 编辑器模式

@@ -40,6 +40,8 @@ watch(content, (newContent) => {
   width: 100%;
   height: 100%;
   position: relative;
-  overflow: hidden;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 </style>
