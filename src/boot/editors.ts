@@ -5,6 +5,7 @@ import MonacoEditor from 'src/components/editors/MonacoEditor.vue';
 import ImageEditor from 'src/components/editors/ImageEditor.vue';
 import SettingsEditor from 'src/components/editors/SettingsEditor.vue';
 import MilkdownEditorWrapper from 'src/components/editors/MilkdownEditorWrapper.vue';
+import UmoViewerEditor from 'src/components/editors/UmoViewerEditor.vue';
 import { saveFile } from 'src/services/fileSaver';
 import { useWorkspaceStore } from 'src/stores/workspace';
 import { invokeEditorCommand } from 'src/services/editorCommands';
@@ -235,12 +236,30 @@ const monacoEditorProvider: EditorProvider = {
 };
 
 /**
+ * Umo PDF Viewer 提供器
+ */
+const pdfViewerProvider: EditorProvider = {
+  id: 'umo-pdf-viewer',
+  name: 'Umo PDF Viewer',
+  description: 'PDF 预览',
+  component: UmoViewerEditor,
+  supportedFileTypes: [
+    {
+      extensions: ['.pdf'],
+      mimeTypes: ['application/pdf'],
+    },
+  ],
+  priority: 85,
+};
+
+/**
  * 注册所有编辑器提供器
  */
 export function registerEditors() {
   editorRegistry.register(settingsEditorProvider);
   editorRegistry.register(imageEditorProvider);
   editorRegistry.register(milkdownEditorProvider);
+  editorRegistry.register(pdfViewerProvider);
   editorRegistry.register(monacoEditorProvider);
 }
 

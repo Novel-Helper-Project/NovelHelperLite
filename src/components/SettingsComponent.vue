@@ -248,10 +248,15 @@ function resetAllSettings() {
 .settings-section {
   margin-bottom: 24px;
   background: var(--vscode-editor-background);
-  border-radius: 8px;
-  border: 1px solid var(--vscode-border);
+  /* border-radius: 8px; */
+  /* border: 1px solid var(--vscode-border); */
   overflow: hidden;
+  /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); */
 }
+
+/* .theme-light .settings-section {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+} */
 
 .section-title {
   display: flex;

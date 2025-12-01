@@ -320,13 +320,17 @@ function measureTabs() {
 }
 
 function clampTabScroll() {
-  const max = Math.max(0, (tabLayout.value.total || tabMetrics.content) - tabMetrics.viewport);
+  const totalWidth = tabLayout.value.total || tabMetrics.content;
+  const max = Math.max(0, totalWidth - tabMetrics.viewport);
   tabScroll.value = Math.max(0, Math.min(tabScroll.value, max));
 }
 
 function updateTabScroll(next: number) {
-  tabScroll.value = next;
-  clampTabScroll();
+  // 先计算并限制滚动值，再设置
+  const totalWidth = tabLayout.value.total || tabMetrics.content;
+  const max = Math.max(0, totalWidth - tabMetrics.viewport);
+  const clampedValue = Math.max(0, Math.min(next, max));
+  tabScroll.value = clampedValue;
 }
 
 function setTabRef(path: string, el: HTMLDivElement | null) {
@@ -393,7 +397,7 @@ function isFileDirty(file: OpenFile) {
 }
 
 .tabbar {
-  height: 36px;
+  height: 38px;
   border: 1px solid var(--vscode-border);
   border-radius: 0;
   padding: 0 4px;

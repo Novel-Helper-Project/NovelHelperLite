@@ -343,9 +343,11 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<Omit<OpenFile, 
         const blob = await fh.getFile();
         const mime = blob.type || file.mime;
         const isImage = !!mime && mime.startsWith('image/');
-        const content = isImage ? '' : await blob.text();
-        const nextSavedContent = file.savedContent ?? (isImage ? file.savedContent : content);
-        const mediaUrl = isImage ? URL.createObjectURL(blob) : undefined;
+        const isPdf = !!mime && mime.includes('pdf');
+        const content = isImage || isPdf ? '' : await blob.text();
+        const nextSavedContent =
+          file.savedContent ?? (isImage || isPdf ? file.savedContent ?? '' : content);
+        const mediaUrl = isImage || isPdf ? URL.createObjectURL(blob) : undefined;
         return {
           ...base,
           content,
@@ -363,7 +365,8 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<Omit<OpenFile, 
     }
   } else if (platform === 'node') {
     try {
-      const content = await Fs.readText({ kind: 'file', name: file.name, path: file.path });
+      const entry: FsEntry = { kind: 'file', name: file.name, path: file.path };
+      const content = await Fs.readText(entry);
       const nextSavedContent = file.savedContent ?? content;
       return {
         ...base,
@@ -387,6 +390,7 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<Omit<OpenFile, 
       const blob = await Fs.getBlob(entry);
       const mime = blob.type || file.mime;
       const isImage = mime ? mime.startsWith('image/') : !!file.isImage;
+      const isPdf = mime ? mime.includes('pdf') : false;
 
       if (isImage) {
         const mediaUrl = URL.createObjectURL(blob);
@@ -397,6 +401,20 @@ async function hydrateOpenFile(file: PersistedOpenFile): Promise<Omit<OpenFile, 
           ...(nextSavedContent !== undefined ? { savedContent: nextSavedContent } : {}),
           ...(mime ? { mime } : {}),
           isImage: true,
+          mediaUrl,
+          ...(file.imageState ? { imageState: file.imageState } : {}),
+          ...(file.viewState ? { viewState: file.viewState } : {}),
+        };
+      }
+
+      if (isPdf) {
+        const mediaUrl = URL.createObjectURL(blob);
+        const nextSavedContent = file.savedContent ?? '';
+        return {
+          ...base,
+          content: '',
+          ...(nextSavedContent !== undefined ? { savedContent: nextSavedContent } : {}),
+          ...(mime ? { mime } : {}),
           mediaUrl,
           ...(file.imageState ? { imageState: file.imageState } : {}),
           ...(file.viewState ? { viewState: file.viewState } : {}),

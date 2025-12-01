@@ -25,6 +25,24 @@ export async function readText(entry: FsEntry): Promise<string> {
   return await fs.readFile(entry.path!, 'utf-8');
 }
 
+export async function getBlob(entry: FsEntry): Promise<Blob> {
+  const fs = await import('node:fs/promises');
+  const pathMod = await import('node:path');
+  const buf = await fs.readFile(entry.path!);
+  const ext = pathMod.extname(entry.path ?? '').toLowerCase();
+  let mime = 'application/octet-stream';
+  if (ext === '.pdf') mime = 'application/pdf';
+  else if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) {
+    if (ext === '.png') mime = 'image/png';
+    else if (ext === '.gif') mime = 'image/gif';
+    else if (ext === '.webp') mime = 'image/webp';
+    else if (ext === '.bmp') mime = 'image/bmp';
+    else if (ext === '.svg') mime = 'image/svg+xml';
+    else mime = 'image/jpeg';
+  }
+  return new Blob([buf], { type: mime });
+}
+
 export async function writeText(targetDir: FsEntry, name: string, content: string): Promise<FsEntry> {
   const fs = await import('node:fs/promises');
   const pathMod = await import('node:path');

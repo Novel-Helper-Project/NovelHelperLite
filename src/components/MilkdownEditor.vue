@@ -53,15 +53,15 @@ const createEditor = async () => {
   if (!hostRef.value) return;
   await destroyEditor();
 
-  // H1-H6 图标 (简洁的 SVG)
+  // H1-H6 图标 (简洁的 SVG，使用 CSS 控制颜色)
   const headingIcons = {
-    p: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><text x="6" y="17" font-size="12" font-weight="bold" font-family="sans-serif">P</text></svg>`,
-    h1: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><text x="4" y="17" font-size="12" font-weight="bold" font-family="sans-serif">H1</text></svg>`,
-    h2: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><text x="4" y="17" font-size="12" font-weight="bold" font-family="sans-serif">H2</text></svg>`,
-    h3: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><text x="4" y="17" font-size="12" font-weight="bold" font-family="sans-serif">H3</text></svg>`,
-    h4: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><text x="4" y="17" font-size="11" font-weight="bold" font-family="sans-serif">H4</text></svg>`,
-    h5: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><text x="4" y="17" font-size="11" font-weight="bold" font-family="sans-serif">H5</text></svg>`,
-    h6: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><text x="4" y="17" font-size="11" font-weight="bold" font-family="sans-serif">H6</text></svg>`,
+    p: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><text x="6" y="17" font-size="12" font-weight="bold" font-family="sans-serif" fill="currentColor">P</text></svg>`,
+    h1: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><text x="4" y="17" font-size="12" font-weight="bold" font-family="sans-serif" fill="currentColor">H1</text></svg>`,
+    h2: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><text x="4" y="17" font-size="12" font-weight="bold" font-family="sans-serif" fill="currentColor">H2</text></svg>`,
+    h3: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><text x="4" y="17" font-size="12" font-weight="bold" font-family="sans-serif" fill="currentColor">H3</text></svg>`,
+    h4: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><text x="4" y="17" font-size="11" font-weight="bold" font-family="sans-serif" fill="currentColor">H4</text></svg>`,
+    h5: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><text x="4" y="17" font-size="11" font-weight="bold" font-family="sans-serif" fill="currentColor">H5</text></svg>`,
+    h6: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><text x="4" y="17" font-size="11" font-weight="bold" font-family="sans-serif" fill="currentColor">H6</text></svg>`,
   };
 
   // 启用工具栏功能
@@ -433,12 +433,14 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   font-size: 12px;
+  font-weight: 500;
   transition: all 0.1s ease;
 }
 
 :deep(.milkdown .milkdown-toolbar .toolbar-item:hover) {
   background: var(--vscode-button-hoverBackground);
   border-color: var(--vscode-button-hoverBorder);
+  color: var(--vscode-button-hoverForeground);
 }
 
 :deep(.milkdown .milkdown-toolbar .toolbar-item.active) {
@@ -455,15 +457,27 @@ onBeforeUnmount(() => {
   margin: 0 4px;
 }
 
-/* 工具条图标 */
+/* 工具条图标 - 确保在所有主题下都可见 */
 :deep(.milkdown .milkdown-toolbar .toolbar-item svg) {
   width: 16px;
   height: 16px;
   fill: var(--vscode-button-foreground);
   color: var(--vscode-button-foreground);
+  display: block;
 }
 
 :deep(.milkdown .milkdown-toolbar .toolbar-item:hover svg) {
+  fill: var(--vscode-button-hoverForeground);
+  color: var(--vscode-button-hoverForeground);
+}
+
+/* 确保 SVG text 元素也能正确适应主题 */
+:deep(.milkdown .milkdown-toolbar .toolbar-item svg text) {
+  fill: var(--vscode-button-foreground);
+  color: var(--vscode-button-foreground);
+}
+
+:deep(.milkdown .milkdown-toolbar .toolbar-item:hover svg text) {
   fill: var(--vscode-button-hoverForeground);
   color: var(--vscode-button-hoverForeground);
 }

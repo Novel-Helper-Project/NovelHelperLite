@@ -44,4 +44,40 @@ watch(content, (newContent) => {
   display: flex;
   flex-direction: column;
 }
+
+/* 改进的滚动条样式 */
+.milkdown-editor-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.milkdown-editor-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.milkdown-editor-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.milkdown-editor-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.milkdown-editor-container::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 亮色主题适配 */
+.theme-light .milkdown-editor-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.theme-light .milkdown-editor-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
 </style>

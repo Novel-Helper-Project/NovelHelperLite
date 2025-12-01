@@ -1051,6 +1051,19 @@ async function openFile(node: ExplorerNode) {
     try {
       const blob = await Fs.getBlob(node.fsEntry);
       const mime = blob.type || 'application/octet-stream';
+      if (mime.includes('pdf')) {
+        const mediaUrl = URL.createObjectURL(blob);
+        upsertAndFocus({
+          path,
+          name: node.label,
+          content: '',
+          handle: (node.handle as FileSystemFileHandle) ?? null,
+          fsEntry: node.fsEntry,
+          mime,
+          mediaUrl,
+        });
+        return;
+      }
       if (mime.startsWith('image/')) {
         const mediaUrl = URL.createObjectURL(blob);
         upsertAndFocus({
@@ -1085,6 +1098,19 @@ async function openFile(node: ExplorerNode) {
     try {
       const blob = await Fs.getBlob(node.fsEntry);
       const mime = blob.type || 'application/octet-stream';
+      if (mime.includes('pdf')) {
+        const mediaUrl = URL.createObjectURL(blob);
+        upsertAndFocus({
+          path,
+          name: node.label,
+          content: '',
+          handle: null,
+          fsEntry: node.fsEntry,
+          mime,
+          mediaUrl,
+        });
+        return;
+      }
       if (mime.startsWith('image/')) {
         const mediaUrl = URL.createObjectURL(blob);
         upsertAndFocus({
@@ -1116,14 +1142,43 @@ async function openFile(node: ExplorerNode) {
   }
 
   try {
-    const content = await Fs.readText(node.fsEntry);
+    const blob = await Fs.getBlob(node.fsEntry);
+    const mime = blob.type || 'application/octet-stream';
+    if (mime.includes('pdf')) {
+      const mediaUrl = URL.createObjectURL(blob);
+      upsertAndFocus({
+        path,
+        name: node.label,
+        content: '',
+        handle: null,
+        fsEntry: node.fsEntry,
+        mime,
+        mediaUrl,
+      });
+      return;
+    }
+    if (mime.startsWith('image/')) {
+      const mediaUrl = URL.createObjectURL(blob);
+      upsertAndFocus({
+        path,
+        name: node.label,
+        content: '',
+        handle: null,
+        fsEntry: node.fsEntry,
+        mime,
+        mediaUrl,
+        isImage: true,
+      });
+      return;
+    }
+    const content = await blob.text();
     upsertAndFocus({
       path,
       name: node.label,
       content,
       handle: null,
       fsEntry: node.fsEntry,
-      mime: 'text/plain',
+      mime: mime || 'text/plain',
       isImage: false,
     });
   } catch (e) {

@@ -41,6 +41,7 @@ class UnifiedFilesystem implements FilesystemInterface {
   async getBlob(entry: FsEntry): Promise<Blob> {
     const p = this.getPlatform();
     if (p === 'web') return WebAdapter.getBlob(entry);
+    if (p === 'node') return NodeAdapter.getBlob(entry);
     return CapAdapter.getBlob(entry);
   }
   async writeText(targetDir: FsEntry, name: string, content: string): Promise<FsEntry> {

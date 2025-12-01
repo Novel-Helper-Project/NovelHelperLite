@@ -36,6 +36,7 @@
     "@capawesome/capacitor-file-picker": "^7.2.0",
     "@milkdown/crepe": "^7.17.2",
     "@quasar/extras": "^1.16.4",
+    "@umoteam/viewer": "^0.3.0",
     "monaco-editor": "^0.55.1",
     "naive-ui": "^2.39.0",
     "pinia": "^3.0.4",
