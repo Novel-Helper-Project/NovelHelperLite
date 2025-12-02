@@ -115,51 +115,52 @@ export function getKeyboardHeight(): number {
   // 方案三：Window resize 比较（在 onKeyboardStateChange 中处理）
   return 0;
 }
-
 /**
  * 监听虚拟键盘的显示/隐藏
- * iOS 使用 visualViewport，Android 使用 resize 事件结合高度比较
+ * 支持方案一(Virtual Keyboard API)、方案二(Visual Viewport API)的优先级逻辑
  */
-export function onKeyboardStateChange(callback: (isVisible: boolean, height: number) => void) {
-  let lastInnerHeight = window.innerHeight;
-  let keyboardVisible = false;
+export function onKeyboardStateChange(
+  callback: (isVisible: boolean, height: number) => void,
+  config: Partial<InputMethodConfig> = {}
+): () => void {
+  const finalConfig = { ...DEFAULT_CONFIG, ...config };
+  const cleanups: (() => void)[] = [];
 
-  const handleResize = () => {
-    const currentHeight = window.innerHeight;
-    const heightDiff = lastInnerHeight - currentHeight;
+  let lastKeyboardHeight = 0;
 
-    // 判断键盘是否显示（高度减少超过 50px 认为键盘显示）
-    const isNowVisible = heightDiff > 50;
-
-    if (isNowVisible !== keyboardVisible) {
-      keyboardVisible = isNowVisible;
-      const keyboardHeight = isNowVisible
-        ? Math.max(heightDiff, getKeyboardHeight())
-        : getKeyboardHeight();
-      callback(keyboardVisible, keyboardHeight);
+  // 方案一：Virtual Keyboard API
+  const vkCleanup = setupVirtualKeyboardAPI((height) => {
+    const isNowVisible = height > 0;
+    if (height !== lastKeyboardHeight) {
+      lastKeyboardHeight = height;
+      callback(isNowVisible, height);
     }
+  });
+  if (vkCleanup) {
+    cleanups.push(vkCleanup);
+  }
 
-    lastInnerHeight = currentHeight;
-  };
-
-  // 监听 visualViewport 变化（iOS）
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
+  // 方案二：Visual Viewport API 监听
+  if (window.visualViewport && finalConfig.enableVisualViewportListener) {
+    const handleVisualViewportResize = () => {
       const height = getKeyboardHeight();
       const isNowVisible = height > 0;
-      if (isNowVisible !== keyboardVisible) {
-        keyboardVisible = isNowVisible;
-        callback(keyboardVisible, height);
+
+      if (height !== lastKeyboardHeight) {
+        lastKeyboardHeight = height;
+        callback(isNowVisible, height);
       }
+    };
+
+    window.visualViewport.addEventListener('resize', handleVisualViewportResize);
+    cleanups.push(() => {
+      window.visualViewport?.removeEventListener('resize', handleVisualViewportResize);
     });
   }
 
-  // 监听 window resize（通用）
-  window.addEventListener('resize', handleResize);
-
-  // 返回移除监听器的函数
+  // 返回统一的清理函数
   return () => {
-    window.removeEventListener('resize', handleResize);
+    cleanups.forEach((cleanup) => cleanup());
   };
 }
 
