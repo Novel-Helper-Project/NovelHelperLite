@@ -168,7 +168,6 @@ import { storage } from 'src/services/storage';
 import {
   isMobileDevice,
   supportsVirtualKeyboardAPI,
-  getKeyboardHeight,
   onKeyboardStateChange,
 } from 'src/utils/inputMethodAdapter';
 
