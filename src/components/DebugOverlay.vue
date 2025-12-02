@@ -142,6 +142,22 @@
           <div class="debug-label">键盘高度:</div>
           <div class="debug-value keyboard-height">{{ keyboardState.height }}px</div>
         </div>
+        <div class="debug-item">
+          <div class="debug-label">测试高度:</div>
+          <div class="debug-value-input-group">
+            <input
+              v-model.number="testKeyboardHeight"
+              type="number"
+              class="debug-input"
+              min="0"
+              max="1000"
+              placeholder="输入高度值测试"
+              @change="applyTestKeyboardHeight"
+            />
+            <button class="debug-input-btn" @click="applyTestKeyboardHeight">应用</button>
+            <button class="debug-input-btn" @click="resetTestKeyboardHeight">重置</button>
+          </div>
+        </div>
       </div>
 
       <!-- 快捷操作区 -->
@@ -238,6 +254,9 @@ const keyboardState = ref({
   detectionMethods: [] as string[],
 });
 
+// 测试键盘高度
+const testKeyboardHeight = ref<number | null>(null);
+
 // 打开设置页面
 function openSettingsTab() {
   const settingsFile = {
@@ -323,6 +342,25 @@ function checkAddEventListenerPolluted() {
   } else {
     isAddEventListenerPolluted.value = false;
   }
+}
+
+// 应用测试键盘高度
+function applyTestKeyboardHeight() {
+  if (testKeyboardHeight.value === null || testKeyboardHeight.value < 0) {
+    return;
+  }
+  const height = Math.floor(testKeyboardHeight.value);
+  document.documentElement.style.setProperty('--keyboard-inset-height', `${height}px`);
+  keyboardState.value.height = height;
+  keyboardState.value.isVisible = height > 0;
+}
+
+// 重置测试键盘高度
+function resetTestKeyboardHeight() {
+  testKeyboardHeight.value = null;
+  document.documentElement.style.removeProperty('--keyboard-inset-height');
+  keyboardState.value.height = 0;
+  keyboardState.value.isVisible = false;
 }
 
 // 位置状态 - 默认在右下角
@@ -617,6 +655,51 @@ onUnmounted(() => {
 
 .debug-value.keyboard-hidden {
   color: #999;
+}
+
+.debug-value-input-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.debug-input {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #4fc3f7;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: inherit;
+  width: 60px;
+}
+
+.debug-input:focus {
+  outline: none;
+  border-color: #4fc3f7;
+  background: rgba(79, 195, 247, 0.1);
+}
+
+.debug-input-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e0e0e0;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.debug-input-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.debug-input-btn:active {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .debug-actions {

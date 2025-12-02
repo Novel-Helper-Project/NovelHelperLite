@@ -2,7 +2,7 @@
   <div
     ref="containerRef"
     class="editor-container"
-    :style="{ height: computedHeight + 'px', overflow: 'auto' }"
+    :style="{ height: adjustedHeight + 'px', overflow: 'auto' }"
   >
     <!-- 内联确认对话框：二级匹配确认 -->
     <div v-if="pendingSecondaryConfirm" class="inline-confirm">
@@ -147,7 +147,31 @@ function cancelEditorChoice() {
 
 // 计算容器高度
 const computedHeight = ref(0);
+const keyboardHeight = ref(0);
 const containerRef = ref<HTMLElement | null>(null);
+
+// 监听键盘高度变化
+onMounted(() => {
+  const updateKeyboardHeight = () => {
+    const value = getComputedStyle(document.documentElement)
+      .getPropertyValue('--keyboard-inset-height')
+      .trim();
+    keyboardHeight.value = parseInt(value) || 0;
+  };
+
+  updateKeyboardHeight();
+  // 定期检查键盘高度变化
+  const interval = setInterval(updateKeyboardHeight, 100);
+
+  onUnmounted(() => {
+    clearInterval(interval);
+  });
+});
+
+// 调整后的高度（减去键盘高度）
+const adjustedHeight = computed(() => {
+  return Math.max(0, computedHeight.value - keyboardHeight.value);
+});
 
 // 计算并更新容器高度
 function updateContainerHeight() {
