@@ -4,7 +4,57 @@
     class="editor-container"
     :style="{ height: computedHeight + 'px', overflow: 'auto' }"
   >
-    <div v-if="selectedEditor" class="editor-content">
+    <!-- 内联确认对话框：二级匹配确认 -->
+    <div v-if="pendingSecondaryConfirm" class="inline-confirm">
+      <div class="inline-confirm-content">
+        <div class="inline-confirm-icon">⚠️</div>
+        <div class="inline-confirm-title">确认打开</div>
+        <div class="inline-confirm-message">{{ pendingSecondaryConfirm.message }}</div>
+        <div class="inline-confirm-actions">
+          <button class="inline-btn inline-btn-cancel" @click="cancelSecondaryConfirm">取消</button>
+          <button class="inline-btn inline-btn-ok" @click="confirmSecondaryConfirm">
+            仍要打开
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 内联选择对话框：多编辑器选择 -->
+    <div v-else-if="pendingEditorChoice" class="inline-confirm">
+      <div class="inline-confirm-content">
+        <div class="inline-confirm-icon">📝</div>
+        <div class="inline-confirm-title">选择编辑器</div>
+        <div class="inline-confirm-message">
+          有 {{ pendingEditorChoice.editors.length }} 个编辑器可以打开此文件
+        </div>
+        <div class="inline-editor-list">
+          <label
+            v-for="editor in pendingEditorChoice.editors"
+            :key="editor.id"
+            class="inline-editor-option"
+            :class="{ selected: pendingEditorChoice.selectedId === editor.id }"
+          >
+            <input
+              type="radio"
+              :value="editor.id"
+              v-model="pendingEditorChoice.selectedId"
+              name="editor-choice"
+            />
+            <span class="editor-option-label">{{ editor.name }}</span>
+            <span v-if="editor.description" class="editor-option-desc">{{
+              editor.description
+            }}</span>
+          </label>
+        </div>
+        <div class="inline-confirm-actions">
+          <button class="inline-btn inline-btn-cancel" @click="cancelEditorChoice">取消</button>
+          <button class="inline-btn inline-btn-ok" @click="confirmEditorChoice">打开</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 正常编辑器内容 -->
+    <div v-else-if="selectedEditor" class="editor-content">
       <component
         :is="selectedEditor.component"
         :file="file"
@@ -23,7 +73,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, nextTick } from 'vue';
-import { Dialog } from 'quasar';
 import type { OpenFile } from 'src/stores/workspace';
 import { useWorkspaceStore } from 'src/stores/workspace';
 import { editorRegistry } from 'src/types/editorProvider';
@@ -45,6 +94,56 @@ const emit = defineEmits<{
 const selectedEditor = ref<EditorProvider | null>(null);
 // 存储用户的编辑器偏好(文件扩展名 -> 编辑器ID)
 const editorPreferences = ref<Record<string, string>>({});
+
+// 内联确认对话框状态
+const pendingSecondaryConfirm = ref<{
+  message: string;
+  provider: EditorProvider;
+} | null>(null);
+
+const pendingEditorChoice = ref<{
+  editors: EditorProvider[];
+  selectedId: string;
+  ext: string;
+} | null>(null);
+
+// 二级匹配确认操作
+function confirmSecondaryConfirm() {
+  if (pendingSecondaryConfirm.value) {
+    selectedEditor.value = pendingSecondaryConfirm.value.provider;
+    pendingSecondaryConfirm.value = null;
+  }
+}
+
+function cancelSecondaryConfirm() {
+  pendingSecondaryConfirm.value = null;
+  selectedEditor.value = null;
+}
+
+// 多编辑器选择操作
+function confirmEditorChoice() {
+  if (pendingEditorChoice.value) {
+    const chosen = pendingEditorChoice.value.editors.find(
+      (e) => e.id === pendingEditorChoice.value!.selectedId,
+    );
+    if (chosen) {
+      const ext = pendingEditorChoice.value.ext;
+      if (ext) {
+        editorPreferences.value[ext] = chosen.id;
+      }
+      selectedEditor.value = chosen;
+    }
+    pendingEditorChoice.value = null;
+  }
+}
+
+function cancelEditorChoice() {
+  if (pendingEditorChoice.value) {
+    // 使用默认编辑器（第一个）
+    selectedEditor.value = pendingEditorChoice.value.editors[0] || null;
+    pendingEditorChoice.value = null;
+  }
+}
 
 // 计算容器高度
 const computedHeight = ref(0);
@@ -117,49 +216,19 @@ function selectEditor() {
     }
   }
 
-  // 多个编辑器支持,弹出选择对话框
+  // 多个编辑器支持,使用内联选择
   const defaultEditor = primaryEditors[0];
   if (!defaultEditor) {
     selectedEditor.value = null;
     return;
   }
 
-  Dialog.create({
-    title: '选择编辑器',
-    message: `有 ${primaryEditors.length} 个编辑器可以打开此文件,请选择一个:`,
-    options: {
-      type: 'radio',
-      model: defaultEditor.id,
-      items: primaryEditors.map((editor) => ({
-        label: editor.name,
-        value: editor.id,
-        caption: editor.description,
-      })),
-    },
-    ok: {
-      label: '打开',
-      color: 'primary',
-    },
-    cancel: {
-      label: '取消',
-      flat: true,
-    },
-    persistent: false,
-  })
-    .onOk((editorId: string) => {
-      const chosen = primaryEditors.find((e) => e.id === editorId);
-      if (chosen) {
-        // 记住用户的选择
-        if (ext) {
-          editorPreferences.value[ext] = editorId;
-        }
-        selectedEditor.value = chosen;
-      }
-    })
-    .onCancel(() => {
-      // 用户取消,使用默认编辑器(优先级最高的)
-      selectedEditor.value = defaultEditor;
-    });
+  // 显示内联编辑器选择
+  pendingEditorChoice.value = {
+    editors: primaryEditors,
+    selectedId: defaultEditor.id,
+    ext,
+  };
 }
 
 // 检查二级匹配编辑器
@@ -182,26 +251,11 @@ function checkSecondaryEditors() {
     rule.confirmMessage ||
     `此文件可能不适合使用 ${provider.name} 打开。\n\n文件: ${props.file.name}\n\n是否仍要打开?`;
 
-  Dialog.create({
-    title: '确认打开',
+  // 显示内联确认
+  pendingSecondaryConfirm.value = {
     message: confirmMessage,
-    html: true,
-    ok: {
-      label: '仍要打开',
-      color: 'warning',
-    },
-    cancel: {
-      label: '取消',
-      flat: true,
-    },
-    persistent: false,
-  })
-    .onOk(() => {
-      selectedEditor.value = provider;
-    })
-    .onCancel(() => {
-      selectedEditor.value = null;
-    });
+    provider,
+  };
 }
 
 function handleContentUpdate(content: string) {
@@ -294,6 +348,10 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   position: relative;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* 改进的滚动条样式 */
@@ -364,5 +422,128 @@ onUnmounted(() => {
 .no-editor-hint {
   font-size: 13px;
   opacity: 0.7;
+}
+
+/* 内联确认对话框样式 */
+.inline-confirm {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--vscode-editor-background);
+  padding: 20px;
+}
+
+.inline-confirm-content {
+  max-width: 400px;
+  width: 100%;
+  background: var(--vscode-sideBar-background);
+  border: 1px solid var(--vscode-border);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.inline-confirm-icon {
+  font-size: 36px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.inline-confirm-title {
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--vscode-text);
+  margin-bottom: 12px;
+}
+
+.inline-confirm-message {
+  font-size: 14px;
+  color: var(--vscode-muted);
+  text-align: center;
+  margin-bottom: 20px;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+.inline-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.inline-btn {
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.inline-btn-cancel {
+  background: transparent;
+  color: var(--vscode-muted);
+  border: 1px solid var(--vscode-border);
+}
+
+.inline-btn-cancel:hover {
+  background: var(--vscode-hover-background);
+  color: var(--vscode-text);
+}
+
+.inline-btn-ok {
+  background: var(--vscode-button-background, #0078d4);
+  color: var(--vscode-button-foreground, #fff);
+}
+
+.inline-btn-ok:hover {
+  background: var(--vscode-button-hoverBackground, #106ebe);
+}
+
+/* 编辑器选择列表 */
+.inline-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.inline-editor-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--vscode-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.inline-editor-option:hover {
+  background: var(--vscode-hover-background);
+}
+
+.inline-editor-option.selected {
+  border-color: var(--vscode-button-background, #0078d4);
+  background: rgba(0, 120, 212, 0.1);
+}
+
+.inline-editor-option input[type='radio'] {
+  margin: 0;
+}
+
+.editor-option-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vscode-text);
+}
+
+.editor-option-desc {
+  font-size: 12px;
+  color: var(--vscode-muted);
+  margin-left: auto;
 }
 </style>

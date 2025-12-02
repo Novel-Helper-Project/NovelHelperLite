@@ -354,12 +354,14 @@ html {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  height: 38px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--vscode-border);
   font-size: 12px;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--vscode-muted);
+  box-sizing: border-box;
 }
 
 .panel-title {

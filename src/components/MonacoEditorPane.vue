@@ -761,10 +761,13 @@ function isFileDirty(file: OpenFile) {
   display: flex;
   flex-direction: column;
   background: #0f1216;
-  border: 1px solid var(--vscode-border);
+  outline: 1px solid var(--vscode-border);
+  outline-offset: -1px;
   border-radius: 0;
   padding: 0;
+  margin: 0;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .theme-light .editor-body {
