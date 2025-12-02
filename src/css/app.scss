@@ -99,6 +99,43 @@ body {
   width: 100%;
 }
 
+/* 移动端虚拟键盘相关适配 */
+@media (hover: none) and (pointer: coarse) {
+  /* 移动设备上禁用 300ms 点击延迟 */
+  input,
+  button,
+  textarea,
+  [contenteditable] {
+    touch-action: manipulation;
+  }
+
+  /* 防止 iOS 自动放大 input 字体 */
+  input,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* 防止 iOS 中的默认控件样式 */
+  input[type='button'],
+  input[type='submit'],
+  input[type='reset'],
+  input[type='checkbox'],
+  input[type='radio'],
+  select,
+  textarea,
+  button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* 光标颜色优化，确保在键盘显示时可见 */
+  input,
+  textarea,
+  [contenteditable] {
+    caret-color: var(--vscode-editor-foreground, #dfe3ea);
+  }
+}
+
 /* 确保 Quasar 布局能完全响应视口高度 */
 #q-app,
 .q-page,

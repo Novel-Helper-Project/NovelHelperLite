@@ -33,6 +33,7 @@ import type { EditorViewState } from 'src/types/editorState';
 import { useSettingsStore } from 'src/stores/settings';
 import { registerEditorCommands, unregisterEditorCommands } from 'src/services/editorCommands';
 import { saveFile } from 'src/services/fileSaver';
+import { setupMobileInputMethodAdapter } from 'src/utils/inputMethodAdapter';
 
 const props = defineProps<{
   file: OpenFile;
@@ -326,6 +327,22 @@ onMounted(() => {
     void saveFile(props.file, content);
   });
 
+  // 移动端输入法适配
+  if (isMobileDevice()) {
+    let cleanupIME: (() => void) | undefined;
+    const setupIMEAdapter = () => {
+      if (editorEl.value && !cleanupIME) {
+        cleanupIME = setupMobileInputMethodAdapter(editorEl.value, {
+          enableAutoScroll: true,
+          scrollPadding: 120,
+        });
+      }
+    };
+
+    // 延迟初始化，确保 DOM 完全就绪
+    setTimeout(setupIMEAdapter, 100);
+  }
+
   // 恢复视图状态
   if (props.file.viewState) {
     editor.restoreViewState(props.file.viewState as unknown as monaco.editor.ICodeEditorViewState);
@@ -588,5 +605,23 @@ function getLanguageFromMime(mime: string): string {
   position: absolute;
   inset: -16px -12px -8px -12px;
   background: transparent;
+}
+
+/* 移动端输入法适配样式 */
+.monaco-editor-container.ime-keyboard-visible {
+  /* 键盘显示时，编辑区域可以获得更多注意力 */
+  transition: transform 0.3s ease-out;
+}
+
+.monaco-editor-container.ime-keyboard-visible :deep(.monaco-editor) {
+  /* 确保输入法候选框不会遮挡光标 */
+  caret-color: var(--vscode-editor-foreground);
+}
+
+/* 防止 iOS Safari 的缩放和反弹 */
+@supports (padding: max(0px)) {
+  .monaco-editor-container {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
 }
 </style>

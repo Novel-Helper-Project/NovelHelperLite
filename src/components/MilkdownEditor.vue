@@ -14,6 +14,7 @@ import {
   setBlockTypeCommand,
   paragraphSchema,
 } from '@milkdown/kit/preset/commonmark';
+import { setupMobileInputMethodAdapter, isMobileDevice } from 'src/utils/inputMethodAdapter';
 import '@milkdown/crepe/theme/common/style.css';
 /**
  * Available themes:
@@ -134,6 +135,17 @@ const createEditor = async () => {
 
   editorRef.value = instance;
   await instance.create();
+
+  // 移动端输入法适配
+  if (isMobileDevice() && hostRef.value) {
+    // 找到编辑器的可编辑容器
+    const editableElement =
+      hostRef.value.querySelector('[contenteditable="true"]') || hostRef.value;
+    setupMobileInputMethodAdapter(editableElement as HTMLElement, {
+      enableAutoScroll: true,
+      scrollPadding: 120,
+    });
+  }
 
   console.log('Milkdown Editor created with H1-H6 toolbar');
 };
