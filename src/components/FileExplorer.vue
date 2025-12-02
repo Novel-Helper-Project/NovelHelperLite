@@ -222,7 +222,11 @@ function joinPaths(base: string | undefined, name: string) {
   return normalizeSeparator(`${cleanedBase}${separator}${cleanedName}`, separator);
 }
 
-function replacePathBase(path: string | undefined, oldBase: string, newBase: string): string | undefined {
+function replacePathBase(
+  path: string | undefined,
+  oldBase: string,
+  newBase: string,
+): string | undefined {
   if (!path) return path;
   const separator: '/' | '\\' = path.includes('\\') ? '\\' : '/';
   const normalizedPath = path.replace(/\\/g, '/');
@@ -290,7 +294,6 @@ const {
   upsertAndFocus,
   setRootHandle,
   switchWorkspace,
-  setActiveFile,
   closeFile,
 } = useWorkspaceStore();
 
@@ -301,7 +304,7 @@ const contextMenuOptions = computed(() => {
       ? node
       : node
         ? findParentNode(node.key)
-        : explorerData.value[0] ?? null;
+        : (explorerData.value[0] ?? null);
   const hasClipboard = !!clipboard.item;
 
   return [
@@ -412,7 +415,8 @@ function isDirty(file: OpenFile) {
 }
 
 function closeTab(path: string) {
-  closeFile(path);
+  // 触发关闭标签页事件，让标签栏处理关闭逻辑（包括未保存提示）
+  window.dispatchEvent(new CustomEvent('editor-close-tab', { detail: { path } }));
 }
 
 function renderOpenedPrefix({ option }: { option: TreeOption }) {
@@ -440,7 +444,8 @@ function renderOpenedSuffix({ option }: { option: TreeOption }) {
 function handleOpenedSelect(keys: (string | number)[]) {
   if (!keys.length) return;
   const path = keys[0] as string;
-  setActiveFile(path);
+  // 触发标签页激活事件，让标签栏滚动到目标标签并激活
+  window.dispatchEvent(new CustomEvent('editor-activate-tab', { detail: { path } }));
 }
 
 type AllowDropInfo = {
@@ -735,8 +740,7 @@ async function handleDrop(info: TreeDropInfo) {
     return;
   }
 
-  const targetDirNode =
-    info.dropPosition === 'inside' ? node : findParentNode(node.key) ?? null;
+  const targetDirNode = info.dropPosition === 'inside' ? node : (findParentNode(node.key) ?? null);
   if (!targetDirNode || targetDirNode.type !== 'folder' || !targetDirNode.fsEntry) {
     window.alert('无效的目标位置');
     return;
@@ -755,16 +759,15 @@ async function handleDrop(info: TreeDropInfo) {
           targetFs.path &&
           normalizePathForCompare(sourceParentFs.path) === normalizePathForCompare(targetFs.path)));
     const sameName = dragNode.label === name;
-    const moveOptions =
-      sourceParentFs ? { newName: name, sourceParent: sourceParentFs } : { newName: name };
+    const moveOptions = sourceParentFs
+      ? { newName: name, sourceParent: sourceParentFs }
+      : { newName: name };
     const moved =
       sameDirectory && sameName
         ? dragNode.fsEntry
         : await Fs.move(dragNode.fsEntry, targetFs, moveOptions);
     const newPath =
-      moved.path ??
-      dragNode.path ??
-      joinPaths(targetDirNode.path ?? targetDirNode.label, name);
+      moved.path ?? dragNode.path ?? joinPaths(targetDirNode.path ?? targetDirNode.label, name);
     const removed = extractNode(dragNode.key);
     const movingNode = removed?.node ?? null;
     if (!movingNode) return;
@@ -773,7 +776,7 @@ async function handleDrop(info: TreeDropInfo) {
     const parentList =
       info.dropPosition === 'inside'
         ? ensureChildren(targetDirNode)
-        : findParentList(node.key) ?? ensureChildren(targetDirNode);
+        : (findParentList(node.key) ?? ensureChildren(targetDirNode));
     if (!parentList) return;
 
     let insertIndex = parentList.length;
@@ -826,7 +829,8 @@ async function createSiblingOrChild(type: ExplorerNode['type']) {
       created = await Fs.writeText(dirFs, trimmedName, '');
     }
 
-    const newPath = created.path ?? joinPaths(parentDirNode.path ?? parentDirNode.label, trimmedName);
+    const newPath =
+      created.path ?? joinPaths(parentDirNode.path ?? parentDirNode.label, trimmedName);
     const newNode: ExplorerNode =
       type === 'folder'
         ? {
@@ -1395,7 +1399,10 @@ function updateOpenFilesAfterMove(oldBase: string, newBase: string, type: Explor
   const current = workspace.currentFile;
   if (current) {
     const normalizedCurrent = normalizePathForCompare(current.path);
-    if (normalizedCurrent === normalizedOld || (isDir && normalizedCurrent.startsWith(`${normalizedOld}/`))) {
+    if (
+      normalizedCurrent === normalizedOld ||
+      (isDir && normalizedCurrent.startsWith(`${normalizedOld}/`))
+    ) {
       const nextPath = replacePathBase(current.path, oldBase, newBase);
       if (nextPath) {
         current.path = nextPath;
@@ -1450,7 +1457,11 @@ function suggestCopyName(base: string) {
   return `${name}-副本${ext}`;
 }
 
-function validatePasteName(dirNode: ExplorerNode, desired: string, excludeKey?: string): string | null {
+function validatePasteName(
+  dirNode: ExplorerNode,
+  desired: string,
+  excludeKey?: string,
+): string | null {
   if (!hasNameConflict(dirNode, desired, excludeKey)) return desired;
   const fallback = suggestCopyName(desired);
   const next = window.prompt('目标目录已存在同名项，请输入新名称', fallback)?.trim();
@@ -1597,9 +1608,7 @@ async function showProperties(node: ExplorerNode) {
   propertyDialog.path = node.path ?? baseEntry.path ?? '-';
   propertyDialog.size =
     stat?.size !== undefined ? formatBytes(stat.size) : node.type === 'folder' ? '-' : '未知';
-  propertyDialog.modified = stat?.modified
-    ? new Date(stat.modified).toLocaleString()
-    : '未知';
+  propertyDialog.modified = stat?.modified ? new Date(stat.modified).toLocaleString() : '未知';
   propertyDialog.show = true;
 }
 

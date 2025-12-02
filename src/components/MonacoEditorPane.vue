@@ -1,5 +1,21 @@
 <template>
   <div class="monaco-pane">
+    <!-- 隐藏的测量容器，只渲染未测量的标签，测量后自动移除 -->
+    <div ref="tabMeasureRef" class="tab-measure-container" aria-hidden="true">
+      <div
+        v-for="file in unmeasuredFiles"
+        :key="'measure-' + file.uid"
+        class="tab"
+        :ref="(el) => setMeasureRef(file.path, el as HTMLDivElement | null)"
+      >
+        <span class="tab-label">
+          {{ file.name }}
+          <span class="tab-dirty"></span>
+        </span>
+        <button class="tab-close" type="button">×</button>
+      </div>
+    </div>
+
     <div ref="tabbarRef" class="tabbar">
       <div ref="tabTrackRef" class="tab-track" :style="tabTrackStyle">
         <div class="tab-spacer" :style="{ width: `${tabLayout.before}px` }" />
@@ -82,6 +98,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { Dialog } from 'quasar';
 
 import { useWorkspaceStore } from 'src/stores/workspace';
 import type { OpenFile } from 'src/stores/workspace';
@@ -89,6 +106,7 @@ import type { OpenFile } from 'src/stores/workspace';
 import { editorRegistry } from 'src/types/editorProvider';
 import type { ToolbarAction } from 'src/types/editorProvider';
 import EditorContainer from './EditorContainer.vue';
+import { saveFile } from 'src/services/fileSaver';
 
 const {
   state: workspace,
@@ -127,14 +145,24 @@ async function handleToolbarAction(action: ToolbarAction) {
 const editorBodyRef = ref<HTMLDivElement | null>(null);
 const tabbarRef = ref<HTMLDivElement | null>(null);
 const tabTrackRef = ref<HTMLDivElement | null>(null);
+const tabMeasureRef = ref<HTMLDivElement | null>(null);
+const measureRefs = new Map<string, HTMLDivElement>();
+const measuredPaths = ref(new Set<string>()); // 已测量的文件路径
+
+// 计算未测量的文件列表
+const unmeasuredFiles = computed(() => {
+  return workspace.openFiles.filter((file) => !measuredPaths.value.has(file.path));
+});
 let resizeObserver: ResizeObserver | null = null;
 let revealListener: ((event: Event) => void) | null = null;
+let activateTabListener: ((event: Event) => void) | null = null;
+let closeTabListener: ((event: Event) => void) | null = null;
 let pendingReveal: RevealDetail | null = null;
 let tabbarWheelListener: ((event: WheelEvent) => void) | null = null;
 let tabResizeObserver: ResizeObserver | null = null;
 const tabRefs = new Map<string, HTMLDivElement>();
 const tabScroll = ref(0);
-const tabMetrics = reactive({ viewport: 0, content: 0 });
+const tabMetrics = reactive({ viewport: 0 });
 const tabSizes = new Map<string, number>();
 const tabSizesVersion = ref(0);
 let tabTouchStartX: number | null = null;
@@ -193,6 +221,25 @@ const currentPathLabel = computed(() => {
 onMounted(() => {
   revealListener = (event: Event) => handleRevealEvent(event);
   window.addEventListener('workspace-reveal', revealListener);
+
+  // 监听激活标签页事件（供外部调用）
+  activateTabListener = (event: Event) => {
+    const detail = (event as CustomEvent<{ path: string }>).detail;
+    if (detail?.path) {
+      activateTab(detail.path);
+    }
+  };
+  window.addEventListener('editor-activate-tab', activateTabListener);
+
+  // 监听关闭标签页事件（供外部调用）
+  closeTabListener = (event: Event) => {
+    const detail = (event as CustomEvent<{ path: string }>).detail;
+    if (detail?.path) {
+      closeTab(detail.path);
+    }
+  };
+  window.addEventListener('editor-close-tab', closeTabListener);
+
   tabbarWheelListener = (event: WheelEvent) => handleTabbarWheel(event);
   tabbarRef.value?.addEventListener('wheel', tabbarWheelListener, { passive: false });
   if (tabbarRef.value) {
@@ -245,6 +292,14 @@ onBeforeUnmount(() => {
   if (revealListener) {
     window.removeEventListener('workspace-reveal', revealListener);
     revealListener = null;
+  }
+  if (activateTabListener) {
+    window.removeEventListener('editor-activate-tab', activateTabListener);
+    activateTabListener = null;
+  }
+  if (closeTabListener) {
+    window.removeEventListener('editor-close-tab', closeTabListener);
+    closeTabListener = null;
   }
   if (tabbarWheelListener && tabbarRef.value) {
     tabbarRef.value.removeEventListener('wheel', tabbarWheelListener);
@@ -311,26 +366,64 @@ function measureTabs() {
   const host = tabbarRef.value;
   if (!host) return;
   tabMetrics.viewport = host.clientWidth;
-  let content = 0;
+
+  // 从测量容器获取未测量标签的宽度
   for (const file of workspace.openFiles) {
-    const width = tabRefs.get(file.path)?.offsetWidth ?? 120;
-    tabSizes.set(file.path, width);
-    content += width + TAB_GAP;
+    if (measuredPaths.value.has(file.path)) {
+      // 已经测量过，跳过
+      continue;
+    }
+
+    const measureEl = measureRefs.get(file.path);
+    if (measureEl) {
+      // 测量并缓存宽度
+      tabSizes.set(file.path, measureEl.offsetWidth);
+      // 标记为已测量，下次渲染时将从测量容器中移除
+      measuredPaths.value.add(file.path);
+    } else {
+      // 如果测量元素不存在，尝试从可见元素获取
+      const visibleEl = tabRefs.get(file.path);
+      if (visibleEl) {
+        tabSizes.set(file.path, visibleEl.offsetWidth);
+        measuredPaths.value.add(file.path);
+      } else if (!tabSizes.has(file.path)) {
+        // 最后才使用默认值（不标记为已测量，等待下次测量）
+        tabSizes.set(file.path, 120);
+      }
+    }
   }
-  tabMetrics.content = content > 0 ? content - TAB_GAP : 0;
+
+  // 清理已关闭文件的测量记录
+  const openPaths = new Set(workspace.openFiles.map((f) => f.path));
+  for (const path of measuredPaths.value) {
+    if (!openPaths.has(path)) {
+      measuredPaths.value.delete(path);
+      tabSizes.delete(path);
+    }
+  }
+
   tabSizesVersion.value += 1;
   clampTabScroll();
 }
 
+function setMeasureRef(path: string, el: HTMLDivElement | null) {
+  if (el) {
+    measureRefs.set(path, el);
+  } else {
+    measureRefs.delete(path);
+  }
+}
+
 function clampTabScroll() {
-  const totalWidth = tabLayout.value.total || tabMetrics.content;
+  // 使用 tabLayout.total，它基于所有标签的缓存宽度计算
+  const totalWidth = tabLayout.value.total;
   const max = Math.max(0, totalWidth - tabMetrics.viewport);
   tabScroll.value = Math.max(0, Math.min(tabScroll.value, max));
 }
 
 function updateTabScroll(next: number) {
-  // 先计算并限制滚动值，再设置
-  const totalWidth = tabLayout.value.total || tabMetrics.content;
+  // 使用 tabLayout.total，它基于所有标签的缓存宽度计算
+  const totalWidth = tabLayout.value.total;
   const max = Math.max(0, totalWidth - tabMetrics.viewport);
   const clampedValue = Math.max(0, Math.min(next, max));
   tabScroll.value = clampedValue;
@@ -378,7 +471,62 @@ function activateTab(path: string) {
 }
 
 function closeTab(path: string) {
-  closeFile(path);
+  // 查找要关闭的文件
+  const file = workspace.openFiles.find((f) => f.path === path);
+  if (!file) {
+    closeFile(path);
+    return;
+  }
+
+  // 检查是否有未保存的更改
+  if (isFileDirty(file)) {
+    Dialog.create({
+      title: '未保存的更改',
+      message: `文件 "${file.name}" 有未保存的更改。是否要保存？`,
+      cancel: {
+        label: '不保存',
+        flat: true,
+        color: 'negative',
+      },
+      ok: {
+        label: '保存',
+        color: 'primary',
+      },
+      persistent: true,
+    })
+      .onOk(() => {
+        // 用户选择保存
+        saveFile(file, file.content)
+          .then(() => {
+            closeFile(path);
+          })
+          .catch((error) => {
+            console.error('保存文件失败:', error);
+            // 保存失败，询问是否仍要关闭
+            Dialog.create({
+              title: '保存失败',
+              message: '文件保存失败，是否仍要关闭（将丢失更改）？',
+              cancel: {
+                label: '取消',
+                flat: true,
+              },
+              ok: {
+                label: '仍要关闭',
+                color: 'negative',
+              },
+            }).onOk(() => {
+              closeFile(path);
+            });
+          });
+      })
+      .onCancel(() => {
+        // 用户选择不保存，直接关闭
+        closeFile(path);
+      });
+  } else {
+    // 没有未保存的更改，直接关闭
+    closeFile(path);
+  }
 }
 
 function isFileDirty(file: OpenFile) {
@@ -387,6 +535,17 @@ function isFileDirty(file: OpenFile) {
 </script>
 
 <style scoped>
+/* 隐藏的测量容器，用于预先计算所有标签宽度 */
+.tab-measure-container {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  gap: 4px;
+}
+
 .monaco-pane {
   height: 100%;
   max-height: 100%;

@@ -272,12 +272,29 @@ function registerCommandsForFile(file: OpenFile) {
   registeredCommandPath = file.path;
 }
 
+// 检查是否为大文件，大文件禁用语法高亮以提升性能
+function isLargeFile(content: string): boolean {
+  const threshold = settingsStore.editor.largeFileThreshold ?? 500000;
+  return content.length > threshold;
+}
+
 onMounted(() => {
   if (!editorEl.value) return;
 
+  // 检测是否为大文件
+  const isLarge = isLargeFile(props.file.content);
+
   // 优先根据文件扩展名检测语言,其次使用 MIME 类型
-  const language =
+  // 大文件使用 plaintext 以禁用语法高亮
+  const detectedLanguage =
     getLanguageFromFileName(props.file.name) || getLanguageFromMime(props.file.mime || '');
+  const language = isLarge ? 'plaintext' : detectedLanguage;
+
+  if (isLarge) {
+    console.info(
+      `[Monaco] 大文件检测: ${props.file.name} (${props.file.content.length} 字符)，已禁用语法高亮`,
+    );
+  }
 
   editor = monaco.editor.create(editorEl.value, {
     value: props.file.content,
@@ -288,6 +305,16 @@ onMounted(() => {
     fontSize: settingsStore.editor.fontSize,
     fontFamily: settingsStore.editor.fontFamily,
     tabSize: settingsStore.editor.tabSize,
+    // 大文件优化选项
+    ...(isLarge
+      ? {
+          folding: false, // 禁用代码折叠
+          lineNumbers: 'on', // 保持行号
+          minimap: { enabled: false }, // 禁用小地图
+          renderWhitespace: 'none', // 不渲染空白字符
+          guides: { indentation: false }, // 禁用缩进参考线
+        }
+      : {}),
   });
 
   // 注册剪贴板命令

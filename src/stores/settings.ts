@@ -17,6 +17,14 @@ interface SettingsState {
     fontFamily: string;
     tabSize: number;
     wordWrap: boolean;
+    largeFileThreshold: number; // 大文件阈值（字符数），超过此值禁用语法高亮
+  };
+
+  // 标签页设置
+  tabs: {
+    enableGC: boolean; // 是否启用标签页 GC
+    maxCachedTabs: number; // 最大缓存标签页数
+    gcIdleMinutes: number; // 空闲多少分钟后卸载
   };
 
   // 调试设置
@@ -38,6 +46,12 @@ export const useSettingsStore = defineStore('settings', {
       fontFamily: 'Monaco, Consolas, "Courier New", monospace',
       tabSize: 4,
       wordWrap: true,
+      largeFileThreshold: 500000, // 默认 500KB 字符数
+    },
+    tabs: {
+      enableGC: false, // 默认关闭
+      maxCachedTabs: 10, // 默认最多缓存 10 个标签页
+      gcIdleMinutes: 30, // 默认 30 分钟未使用则卸载
     },
     debug: {
       showEditorInfo: false, // 默认关闭
@@ -132,6 +146,22 @@ export const useSettingsStore = defineStore('settings', {
     // 调试设置
     setDebugShowEditorInfo(show: boolean) {
       this.debug.showEditorInfo = show;
+      this.saveToStorage();
+    },
+
+    // 标签页 GC 设置
+    setTabsEnableGC(enable: boolean) {
+      this.tabs.enableGC = enable;
+      this.saveToStorage();
+    },
+
+    setTabsMaxCached(max: number) {
+      this.tabs.maxCachedTabs = Math.max(1, Math.min(50, max));
+      this.saveToStorage();
+    },
+
+    setTabsGcIdleMinutes(minutes: number) {
+      this.tabs.gcIdleMinutes = Math.max(1, Math.min(120, minutes));
       this.saveToStorage();
     },
 

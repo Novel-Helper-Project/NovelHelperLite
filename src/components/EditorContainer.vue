@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, nextTick } from 'vue';
 import { Dialog } from 'quasar';
 import type { OpenFile } from 'src/stores/workspace';
 import { useWorkspaceStore } from 'src/stores/workspace';
@@ -263,6 +263,20 @@ onMounted(async () => {
 
   // 监听窗口大小变化
   window.addEventListener('resize', updateContainerHeight);
+});
+
+// 处理 keep-alive 激活时的高度重新计算
+onActivated(async () => {
+  // 从 keep-alive 缓存恢复时，重新计算高度
+  await nextTick();
+  updateContainerHeight();
+
+  // 如果高度仍然为 0，延迟再次尝试（处理父容器动画/过渡的情况）
+  if (computedHeight.value === 0) {
+    setTimeout(() => {
+      updateContainerHeight();
+    }, 50);
+  }
 });
 
 onUnmounted(() => {
