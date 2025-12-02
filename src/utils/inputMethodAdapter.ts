@@ -76,6 +76,8 @@ export function setupVirtualKeyboardAPI(
   const handleGeometryChange = () => {
     const height = vk?.boundingRect?.height || 0;
     if (height >= 0) {
+      // 更新 CSS 变量，让 CSS 直接使用
+      document.documentElement.style.setProperty('--keyboard-inset-height', `${height}px`);
       callback?.(height);
     }
   };
@@ -84,6 +86,8 @@ export function setupVirtualKeyboardAPI(
 
   return () => {
     vk.removeEventListener?.('geometrychange', handleGeometryChange);
+    // 清理 CSS 变量
+    document.documentElement.style.removeProperty('--keyboard-inset-height');
   };
 }
 

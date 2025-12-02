@@ -106,6 +106,44 @@
         </div>
       </div>
 
+      <!-- 键盘信息区 -->
+      <div class="debug-section">
+        <div class="debug-section-title">⌨️ 虚拟键盘</div>
+        <div class="debug-item">
+          <div class="debug-label">移动设备:</div>
+          <div class="debug-value" :class="{ enabled: keyboardState.isMobile }">
+            {{ keyboardState.isMobile ? '是 ✓' : '否' }}
+          </div>
+        </div>
+        <div v-if="keyboardState.isMobile" class="debug-item">
+          <div class="debug-label">检测方式:</div>
+          <div class="debug-value">
+            <div v-if="keyboardState.detectionMethods.length > 0">
+              <div v-for="(method, idx) in keyboardState.detectionMethods" :key="idx">
+                • {{ method }}
+              </div>
+            </div>
+            <div v-else class="empty">无</div>
+          </div>
+        </div>
+        <div v-if="keyboardState.isMobile" class="debug-item">
+          <div class="debug-label">Virtual KB API:</div>
+          <div class="debug-value" :class="{ enabled: keyboardState.supportsVK }">
+            {{ keyboardState.supportsVK ? '支持 ✓' : '不支持' }}
+          </div>
+        </div>
+        <div v-if="keyboardState.isMobile" class="debug-item">
+          <div class="debug-label">键盘状态:</div>
+          <div class="debug-value" :class="{ enabled: keyboardState.isVisible }">
+            {{ keyboardState.isVisible ? '已打开' : '关闭' }}
+          </div>
+        </div>
+        <div v-if="keyboardState.isMobile && keyboardState.isVisible" class="debug-item">
+          <div class="debug-label">键盘高度:</div>
+          <div class="debug-value keyboard-height">{{ keyboardState.height }}px</div>
+        </div>
+      </div>
+
       <!-- 快捷操作区 -->
       <div class="debug-section">
         <div class="debug-section-title">🚀 快捷操作</div>
@@ -127,6 +165,12 @@ import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useSettingsStore } from 'src/stores/settings';
 import { useWorkspaceStore } from 'src/stores/workspace';
 import { storage } from 'src/services/storage';
+import {
+  isMobileDevice,
+  supportsVirtualKeyboardAPI,
+  getKeyboardHeight,
+  onKeyboardStateChange,
+} from 'src/utils/inputMethodAdapter';
 
 const settingsStore = useSettingsStore();
 const workspaceStore = useWorkspaceStore();
@@ -185,6 +229,15 @@ function toggleMinimize() {
 
 const overlayRef = ref<HTMLDivElement | null>(null);
 const isAddEventListenerPolluted = ref(false);
+
+// 键盘检测相关
+const keyboardState = ref({
+  isMobile: false,
+  supportsVK: false,
+  isVisible: false,
+  height: 0,
+  detectionMethods: [] as string[],
+});
 
 // 打开设置页面
 function openSettingsTab() {
@@ -346,6 +399,32 @@ onMounted(() => {
   pollutionCheckInterval = setInterval(() => {
     checkAddEventListenerPolluted();
   }, 500);
+
+  // 初始化键盘检测信息
+  keyboardState.value.isMobile = isMobileDevice();
+  keyboardState.value.supportsVK = supportsVirtualKeyboardAPI();
+
+  // 更新检测方法
+  const methods: string[] = [];
+  if (supportsVirtualKeyboardAPI()) {
+    methods.push('Virtual Keyboard API');
+  }
+  if (window.visualViewport) {
+    methods.push('Visual Viewport API');
+  }
+  keyboardState.value.detectionMethods = methods;
+
+  // 监听键盘状态变化
+  if (isMobileDevice()) {
+    const cleanupKeyboardListener = onKeyboardStateChange((isVisible, height) => {
+      keyboardState.value.isVisible = isVisible;
+      keyboardState.value.height = height;
+    });
+
+    onUnmounted(() => {
+      cleanupKeyboardListener();
+    });
+  }
 });
 
 onUnmounted(() => {
@@ -527,6 +606,18 @@ onUnmounted(() => {
   color: #ff9800;
   font-weight: 600;
   animation: pulse-warn 1s ease-in-out infinite;
+}
+
+.debug-value.keyboard-height {
+  color: #ce93d8;
+}
+
+.debug-value.keyboard-visible {
+  color: #81c784;
+}
+
+.debug-value.keyboard-hidden {
+  color: #999;
 }
 
 .debug-actions {

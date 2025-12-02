@@ -85,5 +85,11 @@ onUnmounted(() => {
   flex-direction: column;
   min-height: 0;
   box-sizing: border-box;
+
+  /* 移动端：键盘弹出时，为内容区预留空间 */
+  @media (hover: none) and (pointer: coarse) {
+    padding-bottom: var(--keyboard-inset-height);
+    transition: padding-bottom 0.2s ease-out;
+  }
 }
 </style>

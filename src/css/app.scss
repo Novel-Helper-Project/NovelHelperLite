@@ -45,6 +45,9 @@
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
+
+  /* 虚拟键盘高度 */
+  --keyboard-inset-height: 0px;
 }
 
 // Theme System - Light Mode
@@ -309,6 +312,12 @@ html {
   color: var(--vscode-text);
   overflow: auto;
   padding: 0px;
+
+  /* 移动端：键盘弹出时，为主内容区预留空间 */
+  @media (hover: none) and (pointer: coarse) {
+    padding-bottom: var(--keyboard-inset-height);
+    transition: padding-bottom 0.2s ease-out;
+  }
 }
 
 /* 统一的滚动条样式 */
