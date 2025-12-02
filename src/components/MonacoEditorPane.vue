@@ -6,11 +6,13 @@
         v-for="file in unmeasuredFiles"
         :key="'measure-' + file.uid"
         class="tab"
+        :class="{ unloaded: file.isUnloaded }"
         :ref="(el) => setMeasureRef(file.path, el as HTMLDivElement | null)"
       >
         <span class="tab-label">
           {{ file.name }}
-          <span class="tab-dirty"></span>
+          <span v-if="isFileDirty(file)" class="tab-dirty"></span>
+          <span v-if="file.isUnloaded" class="tab-unloaded-icon">💤</span>
         </span>
         <button class="tab-close" type="button">×</button>
       </div>
@@ -22,13 +24,22 @@
         <template v-for="entry in tabLayout.visible" :key="entry.file.uid">
           <div
             class="tab"
-            :class="{ active: entry.file.uid === workspace.currentFile?.uid }"
+            :class="{
+              active: entry.file.uid === workspace.currentFile?.uid,
+              unloaded: entry.file.isUnloaded,
+            }"
             @click="activateTab(entry.file.path)"
             :ref="(el) => setTabRef(entry.file.path, el as HTMLDivElement | null)"
+            :title="
+              entry.file.isUnloaded ? `${entry.file.name} (已卸载，点击重新加载)` : entry.file.name
+            "
           >
             <span class="tab-label">
               {{ entry.file.name }}
               <span v-if="isFileDirty(entry.file)" class="tab-dirty" aria-hidden="true"></span>
+              <span v-if="entry.file.isUnloaded" class="tab-unloaded-icon" aria-hidden="true"
+                >💤</span
+              >
             </span>
             <button class="tab-close" type="button" @click.stop="closeTab(entry.file.path)">
               ×
@@ -78,7 +89,7 @@
       </div>
 
       <!-- 统一的编辑器容器 - 自动选择合适的编辑器 -->
-      <keep-alive v-else :max="20">
+      <keep-alive v-else :max="keepAliveMax">
         <EditorContainer
           :key="workspace.currentFile.uid"
           :file="workspace.currentFile"
@@ -102,6 +113,7 @@ import { Dialog } from 'quasar';
 
 import { useWorkspaceStore } from 'src/stores/workspace';
 import type { OpenFile } from 'src/stores/workspace';
+import { useSettingsStore } from 'src/stores/settings';
 
 import { editorRegistry } from 'src/types/editorProvider';
 import type { ToolbarAction } from 'src/types/editorProvider';
@@ -116,7 +128,18 @@ const {
   closeFile,
   setImageViewState,
   setEditorViewState,
+  reloadUnloadedFile,
 } = useWorkspaceStore();
+
+const settingsStore = useSettingsStore();
+
+// 动态计算 keep-alive 的 max 值
+const keepAliveMax = computed(() => {
+  if (settingsStore.tabs.enableGC) {
+    return settingsStore.tabs.maxCachedTabs;
+  }
+  return 20; // 默认值
+});
 
 // 计算当前文件的工具栏按钮
 const toolbarActions = computed(() => {
@@ -148,10 +171,24 @@ const tabTrackRef = ref<HTMLDivElement | null>(null);
 const tabMeasureRef = ref<HTMLDivElement | null>(null);
 const measureRefs = new Map<string, HTMLDivElement>();
 const measuredPaths = ref(new Set<string>()); // 已测量的文件路径
+// 记录每个文件测量时的休眠状态，用于检测状态变化
+const measuredUnloadedState = new Map<string, boolean>();
 
-// 计算未测量的文件列表
+// 计算未测量的文件列表（包括状态变化的文件）
 const unmeasuredFiles = computed(() => {
-  return workspace.openFiles.filter((file) => !measuredPaths.value.has(file.path));
+  return workspace.openFiles.filter((file) => {
+    // 如果从未测量过，需要测量
+    if (!measuredPaths.value.has(file.path)) return true;
+    // 如果状态发生变化，需要重新测量
+    const prevState = measuredUnloadedState.get(file.path);
+    if (prevState !== undefined && prevState !== !!file.isUnloaded) {
+      // 状态变化，清除旧测量数据
+      measuredPaths.value.delete(file.path);
+      tabSizes.delete(file.path);
+      return true;
+    }
+    return false;
+  });
 });
 let resizeObserver: ResizeObserver | null = null;
 let revealListener: ((event: Event) => void) | null = null;
@@ -226,7 +263,7 @@ onMounted(() => {
   activateTabListener = (event: Event) => {
     const detail = (event as CustomEvent<{ path: string }>).detail;
     if (detail?.path) {
-      activateTab(detail.path);
+      void activateTab(detail.path);
     }
   };
   window.addEventListener('editor-activate-tab', activateTabListener);
@@ -272,6 +309,16 @@ onMounted(() => {
       void nextTick(() => {
         measureTabs();
         ensureActiveTabVisible();
+      });
+    },
+  );
+
+  // 监听标签页休眠状态变化，触发重新测量
+  watch(
+    () => workspace.openFiles.map((f) => `${f.path}:${f.isUnloaded ? '1' : '0'}`).join('|'),
+    () => {
+      void nextTick(() => {
+        measureTabs();
       });
     },
   );
@@ -378,6 +425,8 @@ function measureTabs() {
     if (measureEl) {
       // 测量并缓存宽度
       tabSizes.set(file.path, measureEl.offsetWidth);
+      // 记录测量时的休眠状态
+      measuredUnloadedState.set(file.path, !!file.isUnloaded);
       // 标记为已测量，下次渲染时将从测量容器中移除
       measuredPaths.value.add(file.path);
     } else {
@@ -385,6 +434,7 @@ function measureTabs() {
       const visibleEl = tabRefs.get(file.path);
       if (visibleEl) {
         tabSizes.set(file.path, visibleEl.offsetWidth);
+        measuredUnloadedState.set(file.path, !!file.isUnloaded);
         measuredPaths.value.add(file.path);
       } else if (!tabSizes.has(file.path)) {
         // 最后才使用默认值（不标记为已测量，等待下次测量）
@@ -398,6 +448,7 @@ function measureTabs() {
   for (const path of measuredPaths.value) {
     if (!openPaths.has(path)) {
       measuredPaths.value.delete(path);
+      measuredUnloadedState.delete(path);
       tabSizes.delete(path);
     }
   }
@@ -465,7 +516,13 @@ function getTabPosition(path: string): { start: number; end: number } | null {
 
 // 方案 B：Milkdown 完全使用 flex 布局填满 editor-body，不再单独计算高度
 
-function activateTab(path: string) {
+async function activateTab(path: string) {
+  // 检查文件是否已卸载，如果是则先重新加载
+  const file = workspace.openFiles.find((f) => f.path === path);
+  if (file?.isUnloaded) {
+    await reloadUnloadedFile(path);
+  }
+
   setActiveFile(path);
   void nextTick(() => ensureActiveTabVisible());
 }
@@ -639,6 +696,20 @@ function isFileDirty(file: OpenFile) {
   border-radius: 50%;
   background: var(--vscode-text);
   opacity: 0.75;
+}
+
+.tab-unloaded-icon {
+  font-size: 10px;
+  margin-left: 2px;
+  opacity: 0.7;
+}
+
+.tab.unloaded {
+  opacity: 0.6;
+}
+
+.tab.unloaded .tab-label {
+  font-style: italic;
 }
 
 .tab-close {

@@ -36,6 +36,8 @@ export type OpenFile = {
   viewState?: EditorViewState;
   editorMode?: EditorMode; // 编辑器模式 (Monaco/Milkdown 切换用)
   activeEditorId?: string; // 当前实际使用的编辑器 ID
+  lastAccessTime?: number; // 最后访问时间戳 (GC 用)
+  isUnloaded?: boolean; // 标记是否已卸载 (只保留状态)
 };
 
 type WorkspaceState = {
@@ -62,24 +64,42 @@ const state = reactive<WorkspaceState>({
 
 function upsertAndFocus(file: Omit<OpenFile, 'uid'> & { uid?: number }) {
   const idx = state.openFiles.findIndex((f) => f.path === file.path);
+  const now = Date.now();
   if (idx >= 0) {
     const existing = state.openFiles[idx];
     if (!existing) return;
     const savedContent = file.savedContent ?? existing.savedContent ?? existing.content;
-    const merged: OpenFile = { ...existing, ...file, savedContent, uid: existing.uid };
+    const merged: OpenFile = {
+      ...existing,
+      ...file,
+      savedContent,
+      uid: existing.uid,
+      lastAccessTime: now,
+      isUnloaded: false, // 重新加载
+    };
     state.openFiles[idx] = merged;
     state.currentFile = merged;
   } else {
     const savedContent = file.savedContent ?? file.content;
-    const newFile: OpenFile = { uid: nextFileUid++, ...file, savedContent };
+    const newFile: OpenFile = {
+      uid: nextFileUid++,
+      ...file,
+      savedContent,
+      lastAccessTime: now,
+      isUnloaded: false,
+    };
     state.openFiles.push(newFile);
     state.currentFile = newFile;
   }
+  scheduleGC();
   schedulePersist();
 }
 
 function setActiveFile(path: string) {
   const target = state.openFiles.find((f) => f.path === path) || null;
+  if (target) {
+    target.lastAccessTime = Date.now();
+  }
   state.currentFile = target;
   schedulePersist();
 }
@@ -248,6 +268,172 @@ function schedulePersist() {
     persistTimer = null;
     void persistState();
   }, 150);
+}
+
+// ========== 标签页 GC 逻辑 ==========
+import { useSettingsStore } from './settings';
+
+let gcTimer: ReturnType<typeof setTimeout> | null = null;
+
+// 获取需要被卸载的标签页
+function getTabsToUnload(): OpenFile[] {
+  const settings = useSettingsStore();
+  if (!settings.tabs.enableGC) return [];
+
+  const now = Date.now();
+  const idleThreshold = settings.tabs.gcIdleMinutes * 60 * 1000;
+  const maxCached = settings.tabs.maxCachedTabs;
+
+  // 过滤掉当前文件、设置页面、未保存的文件
+  const candidates = state.openFiles.filter((f) => {
+    if (f.path === state.currentFile?.path) return false; // 当前文件不卸载
+    if (f.isSettings) return false; // 设置页面不卸载
+    if (f.isUnloaded) return false; // 已卸载的不重复处理
+    if (f.content !== f.savedContent) return false; // 未保存的不卸载
+    return true;
+  });
+
+  const toUnload: OpenFile[] = [];
+
+  // 按最后访问时间排序（越早访问的排前面）
+  const sorted = [...candidates].sort((a, b) => {
+    const timeA = a.lastAccessTime ?? 0;
+    const timeB = b.lastAccessTime ?? 0;
+    return timeA - timeB;
+  });
+
+  // 计算当前已缓存（未卸载）的数量
+  const cachedCount = state.openFiles.filter((f) => !f.isUnloaded).length;
+
+  for (const file of sorted) {
+    // 如果已缓存数量超过限制，优先卸载
+    if (cachedCount - toUnload.length > maxCached) {
+      toUnload.push(file);
+      continue;
+    }
+
+    // 检查空闲时间
+    const lastAccess = file.lastAccessTime ?? 0;
+    if (now - lastAccess > idleThreshold) {
+      toUnload.push(file);
+    }
+  }
+
+  return toUnload;
+}
+
+// 卸载标签页（只保留状态，释放内容）
+function unloadTab(file: OpenFile) {
+  // 保存编辑器状态，但清空大量内容以节省内存
+  file.isUnloaded = true;
+  // 不清空 content 和 savedContent，因为重新加载时需要
+  // 但可以清理 mediaUrl 以释放 blob URL
+  if (file.mediaUrl) {
+    URL.revokeObjectURL(file.mediaUrl);
+    delete file.mediaUrl;
+  }
+  console.log(`[TabGC] 已卸载标签页: ${file.name}`);
+}
+
+// 执行 GC
+function performGC() {
+  const tabsToUnload = getTabsToUnload();
+  for (const file of tabsToUnload) {
+    unloadTab(file);
+  }
+  if (tabsToUnload.length > 0) {
+    schedulePersist();
+  }
+}
+
+// 调度 GC（延迟执行，避免频繁触发）
+function scheduleGC() {
+  const settings = useSettingsStore();
+  if (!settings.tabs.enableGC) return;
+
+  if (gcTimer) clearTimeout(gcTimer);
+  gcTimer = setTimeout(() => {
+    gcTimer = null;
+    performGC();
+  }, 5000); // 5秒后执行 GC
+}
+
+// 获取当前缓存的标签页数量（用于 keep-alive 的 max 属性）
+function getCachedTabCount(): number {
+  return state.openFiles.filter((f) => !f.isUnloaded).length;
+}
+
+// 检查文件是否已卸载
+function isFileUnloaded(path: string): boolean {
+  const file = state.openFiles.find((f) => f.path === path);
+  return file?.isUnloaded ?? false;
+}
+
+// 重新加载已卸载的文件（当用户点击时调用）
+async function reloadUnloadedFile(path: string): Promise<void> {
+  const file = state.openFiles.find((f) => f.path === path);
+  if (!file || !file.isUnloaded) return;
+
+  // 标记为加载中
+  file.isUnloaded = false;
+  file.lastAccessTime = Date.now();
+
+  // 如果是图片，需要重新创建 mediaUrl
+  if (file.isImage && file.fsEntry) {
+    try {
+      const blob = await Fs.getBlob(file.fsEntry);
+      file.mediaUrl = URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn('重新加载图片失败', e);
+    }
+  }
+
+  console.log(`[TabGC] 已重新加载标签页: ${file.name}`);
+
+  // 唤醒后立即检查是否需要卸载其他标签页以保持在缓存限制内
+  performGCAfterReload(path);
+
+  schedulePersist();
+}
+
+// 唤醒后执行的 GC，排除刚唤醒的文件
+function performGCAfterReload(excludePath: string) {
+  const settings = useSettingsStore();
+  if (!settings.tabs.enableGC) return;
+
+  const maxCached = settings.tabs.maxCachedTabs;
+  const cachedCount = state.openFiles.filter((f) => !f.isUnloaded).length;
+
+  // 如果没超过限制，不需要 GC
+  if (cachedCount <= maxCached) return;
+
+  // 需要卸载的数量
+  const needToUnload = cachedCount - maxCached;
+
+  // 获取可卸载的候选（排除当前文件、刚唤醒的文件、设置页面、未保存的）
+  const candidates = state.openFiles.filter((f) => {
+    if (f.path === state.currentFile?.path) return false;
+    if (f.path === excludePath) return false; // 排除刚唤醒的
+    if (f.isSettings) return false;
+    if (f.isUnloaded) return false;
+    if (f.content !== f.savedContent) return false;
+    return true;
+  });
+
+  // 按最后访问时间排序（最久未访问的优先卸载）
+  const sorted = [...candidates].sort((a, b) => {
+    const timeA = a.lastAccessTime ?? 0;
+    const timeB = b.lastAccessTime ?? 0;
+    return timeA - timeB;
+  });
+
+  // 卸载需要的数量
+  for (let i = 0; i < needToUnload && i < sorted.length; i++) {
+    const file = sorted[i];
+    if (file) {
+      unloadTab(file);
+    }
+  }
 }
 
 async function persistState() {
@@ -517,5 +703,10 @@ export function useWorkspaceStore() {
     setEditorViewState,
     setEditorMode,
     setActiveEditorId,
+    // GC 相关
+    getCachedTabCount,
+    isFileUnloaded,
+    reloadUnloadedFile,
+    performGC,
   };
 }

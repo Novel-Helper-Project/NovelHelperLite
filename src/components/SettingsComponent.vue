@@ -146,6 +146,57 @@
         </div>
       </div>
 
+      <!-- 标签页设置 -->
+      <div class="settings-section">
+        <h2 class="section-title">
+          <span class="material-icons">tab</span>
+          标签页
+        </h2>
+        <div class="setting-item">
+          <label class="setting-label">
+            <input
+              type="checkbox"
+              v-model="localSettings.tabs.enableGC"
+              @change="onTabsEnableGCChange"
+            />
+            启用自动卸载
+          </label>
+          <p class="setting-desc">
+            当打开过多标签页时，自动卸载长时间未使用的标签页以节省内存。
+            卸载后仅保留状态，重新点击时会从保存的状态恢复。
+          </p>
+        </div>
+        <div class="setting-item" v-if="localSettings.tabs.enableGC">
+          <label class="setting-label">最大缓存标签数</label>
+          <div class="control-group">
+            <input
+              type="range"
+              v-model="localSettings.tabs.maxCachedTabs"
+              :min="3"
+              :max="30"
+              @input="onTabsMaxCachedChange"
+            />
+            <span class="control-value">{{ localSettings.tabs.maxCachedTabs }}</span>
+          </div>
+          <p class="setting-desc">超过此数量的标签页会被自动卸载（从最久未使用的开始）。</p>
+        </div>
+        <div class="setting-item" v-if="localSettings.tabs.enableGC">
+          <label class="setting-label">空闲卸载时间</label>
+          <div class="control-group">
+            <input
+              type="range"
+              v-model="localSettings.tabs.gcIdleMinutes"
+              :min="5"
+              :max="120"
+              :step="5"
+              @input="onTabsGcIdleMinutesChange"
+            />
+            <span class="control-value">{{ localSettings.tabs.gcIdleMinutes }} 分钟</span>
+          </div>
+          <p class="setting-desc">标签页超过此时间未使用将被卸载。</p>
+        </div>
+      </div>
+
       <!-- 调试设置 -->
       <div class="settings-section">
         <h2 class="section-title">
@@ -206,6 +257,11 @@ const localSettings = ref({
     tabSize: 4,
     wordWrap: true,
   },
+  tabs: {
+    enableGC: false,
+    maxCachedTabs: 10,
+    gcIdleMinutes: 30,
+  },
   debug: {
     showEditorInfo: false,
   },
@@ -263,6 +319,18 @@ function onEditorWordWrapChange() {
 
 function onDebugShowEditorInfoChange() {
   settingsStore.setDebugShowEditorInfo(localSettings.value.debug.showEditorInfo);
+}
+
+function onTabsEnableGCChange() {
+  settingsStore.setTabsEnableGC(localSettings.value.tabs.enableGC);
+}
+
+function onTabsMaxCachedChange() {
+  settingsStore.setTabsMaxCached(localSettings.value.tabs.maxCachedTabs);
+}
+
+function onTabsGcIdleMinutesChange() {
+  settingsStore.setTabsGcIdleMinutes(localSettings.value.tabs.gcIdleMinutes);
 }
 
 function resetAllSettings() {
